@@ -1,0 +1,15 @@
+.venv
+__pycache__
+*.py[cod]
+*.pyd
+.git
+.gitignore
+.pytest_cache
+.mypy_cache
+.ruff_cache
+node_modules
+docs
+gui
+main.py
+README.md
+AGENTS.md

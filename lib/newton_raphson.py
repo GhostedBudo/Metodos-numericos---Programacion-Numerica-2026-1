@@ -1,32 +1,23 @@
-"""Newton-Raphson. Ver docs/metodos/newton_raphson.md."""
-import re
-import sympy as sp
+"""Newton-Raphson aplicado a optimización. Ver docs/metodos/newton_raphson.md.
+
+La entrada es la primera derivada de la función que se quiere optimizar.
+El método resuelve f'(x) = 0 usando:
+    x_{k+1} = x_k - f'(x_k) / f''(x_k)
+La segunda derivada se calcula automáticamente con sympy.
+"""
 import numpy as np
+import sympy as sp
+
+from lib.optimization_utils import classify_critical_point, parse_expression
 
 
 def _parse_expression(func_str):
-    """Normaliza expresiones matemáticas escritas en notación común."""
-    cleaned = func_str.strip()
-    cleaned = cleaned.replace('sen(', 'sin(')
-    cleaned = cleaned.replace('ln(', 'log(')
-    cleaned = re.sub(r'(?<![A-Za-z0-9_])e(?![A-Za-z0-9_])', 'E', cleaned)
-    cleaned = cleaned.replace('^', '**')
-    return sp.sympify(
-        cleaned,
-        locals={
-            'E': sp.E,
-            'pi': sp.pi,
-            'sin': sp.sin,
-            'cos': sp.cos,
-            'tan': sp.tan,
-            'exp': sp.exp,
-            'log': sp.log,
-        },
-    )
+    """Compatibilidad: usa el parser común de optimización."""
+    return parse_expression(func_str)
 
 
 class NewtonRoots:
-    """Cálculo de raíces mediante el método de Newton-Raphson."""
+    """Búsqueda de puntos críticos (f'(x)=0) mediante Newton-Raphson."""
     def __init__(self, func_str, x0, tol=1e-5, max_iter=150):
         self.func_str = func_str
         self.x0 = float(x0)
@@ -61,7 +52,7 @@ class NewtonRoots:
 
                 # BLINDAJE CONTRA INDETERMINACIONES (NaN, Inf, Complejos)
                 if np.isnan(fx_val) or np.isnan(dfx_val) or np.isinf(fx_val) or np.isinf(dfx_val) or isinstance(fx_val, complex) or isinstance(dfx_val, complex):
-                    raise TypeError("La función o su derivada no están definidas matemáticamente en este punto (Resultado no real, NaN o Infinito).")
+                    raise TypeError("La primera o la segunda derivada no están definidas matemáticamente en este punto (Resultado no real, NaN o Infinito).")
 
                 fx = float(fx_val)
                 dfx = float(dfx_val)
@@ -81,7 +72,7 @@ class NewtonRoots:
                         "success": False,
                         "solution": None,
                         "steps": self.history,
-                        "error_message": f"La derivada se hizo cero en x = {x_current:.6f}. El método falla (división por cero)."
+                        "error_message": f"La segunda derivada f''(x) se hizo cero en x = {x_current:.6f}. El método falla (división por cero)."
                     }
 
                 x_new = x_current - (fx / dfx)
@@ -98,7 +89,7 @@ class NewtonRoots:
                     # Validar también el último punto calculado
                     fx_final = f(x_current)
                     if np.isnan(fx_final) or isinstance(fx_final, complex):
-                        raise TypeError("El punto de convergencia final cayó en una zona indefinida de la función.")
+                        raise TypeError("El punto de convergencia final cayó en una zona indefinida de la primera derivada.")
                     
                     self.history.append({
                         "iter": iter_count,
@@ -109,16 +100,18 @@ class NewtonRoots:
                     break
 
             if iter_count < self.max_iter or error <= self.tol:
-                msg = f"Converge por error aceptable. Valor: {x_current:.6f} (f(x) = {float(f(x_current)):.2e})"
+                msg = f"Converge por error aceptable. Punto crítico: {x_current:.6f} (f'(x) = {float(f(x_current)):.2e})"
             else:
                 msg = f"Alcanzó el máximo de {self.max_iter} iteraciones sin converger. Mejor aproximación: {x_current:.6f}"
 
+            classification = classify_critical_point(f_expr, x_current)
             return {
                 "success": True,
                 "solution": x_current,
                 "steps": self.history,
                 "message": msg,
-                "error_message": None
+                "error_message": None,
+                **classification,
             }
 
         except OverflowError:

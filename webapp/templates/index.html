@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <title>Optimización Numérica — f'(x)=0</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="{{ url_for('static', filename='plotly.min.js') }}"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Optimización Numérica</h1>
+      <p>Bisección · Newton · Secante sobre f'(x)</p>
+    </div>
+    <span class="badge">f'(x) = 0</span>
+  </header>
+
+  <nav class="method-nav" id="methodNav" aria-label="Métodos">
+    <button type="button" class="method-btn active" data-method="bisection">Bisección</button>
+    <button type="button" class="method-btn" data-method="newton">Newton</button>
+    <button type="button" class="method-btn" data-method="secant">Secante</button>
+  </nav>
+
+  <main class="layout">
+    <section class="card input-card">
+      <h2 id="formTitle">Bisección</h2>
+      <p class="hint" id="formHint">Requiere un intervalo [xl, xu] con cambio de signo en f'(x).</p>
+
+      <form id="bisectionForm" class="method-form active" data-method="bisection">
+        <label class="field">
+          <span>Primera derivada f'(x)</span>
+          <input id="b_expr" value="3*x**2 - 3" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="two-cols">
+          <label class="field"><span>xl (límite inferior)</span><input id="b_xl" value="0" inputmode="decimal"></label>
+          <label class="field"><span>xu (límite superior)</span><input id="b_xu" value="1.5" inputmode="decimal"></label>
+          <label class="field"><span>es (%)</span><input id="b_es" value="0.01" inputmode="decimal"></label>
+          <label class="field"><span>imax</span><input id="b_imax" value="100" inputmode="numeric"></label>
+        </div>
+      </form>
+
+      <form id="newtonForm" class="method-form" data-method="newton">
+        <label class="field">
+          <span>Primera derivada f'(x)</span>
+          <input id="n_expr" value="3*x**2 - 3" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="two-cols">
+          <label class="field"><span>x0 (inicial)</span><input id="n_x0" value="0.5" inputmode="decimal"></label>
+          <label class="field"><span>Tolerancia</span><input id="n_tol" value="1e-5" inputmode="decimal"></label>
+          <label class="field"><span>Máx. iteraciones</span><input id="n_max" value="150" inputmode="numeric"></label>
+          <label class="field"><span>X mínimo (gráfica)</span><input id="n_xmin" value="-2" inputmode="decimal"></label>
+          <label class="field"><span>X máximo (gráfica)</span><input id="n_xmax" value="2" inputmode="decimal"></label>
+        </div>
+      </form>
+
+      <form id="secantForm" class="method-form" data-method="secant">
+        <label class="field">
+          <span>Primera derivada f'(x)</span>
+          <input id="s_expr" value="3*x**2 - 3" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="two-cols">
+          <label class="field"><span>x0 (inicial)</span><input id="s_x0" value="0.5" inputmode="decimal"></label>
+          <label class="field"><span>x1 (inicial)</span><input id="s_x1" value="1.5" inputmode="decimal"></label>
+          <label class="field"><span>Tolerancia</span><input id="s_tol" value="1e-5" inputmode="decimal"></label>
+          <label class="field"><span>Máx. iteraciones</span><input id="s_max" value="150" inputmode="numeric"></label>
+          <label class="field"><span>X mínimo (gráfica)</span><input id="s_xmin" value="-2" inputmode="decimal"></label>
+          <label class="field"><span>X máximo (gráfica)</span><input id="s_xmax" value="2" inputmode="decimal"></label>
+        </div>
+      </form>
+
+      <button type="button" class="primary" id="calcBtn">Calcular</button>
+      <div id="errorBox" class="error hidden" role="alert"></div>
+      <p class="hint">Usa <code>*</code> para multiplicar. Acepta <code>sen</code>, <code>ln</code>, <code>e</code>, <code>^</code>.</p>
+    </section>
+
+    <section class="card output-card">
+      <div class="tabs" id="resultTabs" role="tablist">
+        <button type="button" class="tab-btn active" data-tab="summary">Resultado</button>
+        <button type="button" class="tab-btn" data-tab="steps">Paso a Paso</button>
+        <button type="button" class="tab-btn" data-tab="table">Tabla</button>
+        <button type="button" class="tab-btn" data-tab="graph">Gráfica</button>
+        <button type="button" class="tab-btn" data-tab="glossary">Glosario</button>
+      </div>
+
+      <div class="tab-panel active" id="tab-summary">
+        <div id="summaryContent" class="summary-empty">
+          <p>Elige un método, llena los datos y presiona <strong>Calcular</strong>.</p>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-steps">
+        <pre id="stepsText" class="steps">Aquí aparecerá el procedimiento con fórmulas y sustituciones.</pre>
+      </div>
+
+      <div class="tab-panel" id="tab-table">
+        <p class="legend">
+          <strong>Iter</strong> = iteración · <strong>xl</strong> = límite inferior ·
+          <strong>xu</strong> = límite superior · <strong>xr / x_i</strong> = aproximación ·
+          <strong>fp</strong> = f'(x) · <strong>fpp</strong> = f''(x) · <strong>ea</strong> = error (%).
+        </p>
+        <div class="table-wrap">
+          <table id="iterTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-graph">
+        <div class="graph-controls">
+          <div class="segmented" role="group" aria-label="Vista de gráfica">
+            <button type="button" id="btn2d" class="active">2D</button>
+            <button type="button" id="btn3d">3D</button>
+          </div>
+          <span class="hint">La vista 3D muestra f'(x) como superficie y la curva de iteraciones sobre el centro.</span>
+        </div>
+        <div id="plot" class="plot"></div>
+        <p class="legend" id="graphLegend">
+          Eje x = valores de x. Eje y = f'(x). Curva azul = f'(x). Línea punteada = y=0.
+          Puntos naranjas = iteraciones. Estrella verde = x*.
+        </p>
+      </div>
+
+      <div class="tab-panel" id="tab-glossary">
+        <div class="glossary">
+          <h3>Glosario</h3>
+          <dl>
+            <dt>xl</dt><dd>Límite inferior del intervalo. Punto izquierdo.</dd>
+            <dt>xu</dt><dd>Límite superior del intervalo. Punto derecho.</dd>
+            <dt>xr</dt><dd>Punto medio (xl + xu)/2. Aproximación del punto crítico.</dd>
+            <dt>x_i / x(k)</dt><dd>Aproximación actual dentro de Newton o Secante.</dd>
+            <dt>x*</dt><dd>Punto crítico final donde f'(x*) ≈ 0.</dd>
+            <dt>f'(x)</dt><dd>Primera derivada. Resolver f'(x)=0 busca mínimos o máximos.</dd>
+            <dt>f''(x*)</dt><dd>Segunda derivada en x*. &gt;0 mínimo, &lt;0 máximo, ≈0 inconcluso.</dd>
+            <dt>fp</dt><dd>Abreviatura de f'(x) en las tablas.</dd>
+            <dt>fpp</dt><dd>Abreviatura de f''(x) en las tablas.</dd>
+            <dt>test</dt><dd>f'(xl)·f'(xr). Su signo decide qué mitad del intervalo se conserva.</dd>
+            <dt>ea (%)</dt><dd>Error relativo porcentual. Más pequeño = mejor aproximación.</dd>
+            <dt>Iter</dt><dd>Número de iteración.</dd>
+          </dl>
+          <h3>Cómo leer la gráfica</h3>
+          <ul>
+            <li>Eje x: valores de x.</li>
+            <li>Eje y: valores de f'(x).</li>
+            <li>Curva azul: f'(x).</li>
+            <li>Línea negra o punteada: y = 0, donde buscamos el corte.</li>
+            <li>Puntos naranjas: aproximaciones de cada iteración.</li>
+            <li>Estrella verde: x* final.</li>
+            <li>Zona sombreada: intervalo inicial [xl, xu] en Bisección.</li>
+            <li>Vista 3D: superficie de f'(x) y eje de iteración; los puntos bajan hacia f'(x)=0.</li>
+          </ul>
+          <h3>Clasificación</h3>
+          <ul>
+            <li>f''(x*) &gt; 0 → mínimo local.</li>
+            <li>f''(x*) &lt; 0 → máximo local.</li>
+            <li>f''(x*) ≈ 0 → el criterio no decide.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <noscript>Esta aplicación necesita JavaScript para calcular y dibujar las gráficas.</noscript>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

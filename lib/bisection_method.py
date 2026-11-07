@@ -1,13 +1,19 @@
-"""Método de Bisección. Ver docs/metodos/bisection.md."""
-import copy
+"""Método de Bisección aplicado a optimización. Ver docs/metodos/bisection.md.
+
+La entrada es la primera derivada de la función que se quiere optimizar.
+El método resuelve f'(x) = 0. Dado [xl, xu] con f'(xl)*f'(xu) < 0,
+divide el intervalo por mitades hasta que ea < es o iter >= imax.
+"""
 import sympy
+
+from lib.optimization_utils import classify_critical_point, parse_expression
 
 
 class BisectionMethod:
     """
-    Método de bisección para hallar raíces de funciones.
-    Dado [xl, xu] con f(xl)*f(xu) < 0, divide el intervalo por
-    mitades hasta que ea < es o iter >= imax.
+    Método de bisección para hallar puntos críticos de una función.
+    Recibe f'(x). Dado [xl, xu] con f'(xl)*f'(xu) < 0, divide el
+    intervalo por mitades hasta que ea < es o iter >= imax.
     """
     def __init__(self, f_expr, xl, xu, es=0.01, imax=100):
         self.xl = float(xl)
@@ -26,19 +32,19 @@ class BisectionMethod:
                 "success": False,
                 "solution": None,
                 "steps": self.steps,
-                "error_message": "Se requiere una función f(x) para aplicar el método de bisección.",
+                "error_message": "Se requiere la primera derivada f'(x) (la función derivada) para aplicar el método de bisección.",
             }
 
         x_sym = sympy.Symbol('x')
         try:
-            f_sym = sympy.sympify(self.f_expr)
+            f_sym = parse_expression(self.f_expr)
         except Exception:
             return {
                 "success": False,
                 "solution": None,
                 "steps": self.steps,
                 "error_message": (
-                    f"No se pudo evaluar la expresión f(x) = "
+                    f"No se pudo evaluar la primera derivada f'(x) = "
                     f"'{self.f_expr}'. Verifique la sintaxis."
                 ),
             }
@@ -64,7 +70,7 @@ class BisectionMethod:
                 "steps": self.steps,
                 "error_message": (
                     "No se pudo evaluar la función en los extremos del "
-                    "intervalo. Verifique que f(x) sea válida."
+                    "intervalo. Verifique que f'(x) sea válida."
                 ),
             }
 
@@ -77,10 +83,10 @@ class BisectionMethod:
                 "f_expr": self.f_expr,
                 "f_xl": f_xl, "f_xu": f_xu,
                 "description": (
-                    f"Datos de entrada: f(x) = {self.f_expr}, "
+                    f"Datos de entrada: f'(x) = {self.f_expr}, "
                     f"intervalo [{self.xl}, {self.xu}], "
                     f"es = {self.es}%, imax = {self.imax}. "
-                    f"f(xl) = {f_xl:.6g} (raíz exacta en xl)."
+                    f"f'(xl) = {f_xl:.6g} (raíz exacta de f' en xl)."
                 ),
             })
             self.steps.append({
@@ -88,10 +94,11 @@ class BisectionMethod:
                 "root": root, "iterations": 0, "error": 0.0,
                 "converged": True, "reason": "raiz_exacta",
                 "description": (
-                    f"Raíz exacta encontrada en xl = {root:.6g}. "
+                    f"Punto crítico exacto encontrado en xl = {root:.6g}. "
                     f"iter = 0, ea = 0%."
                 ),
             })
+            classification = classify_critical_point(f_sym, root)
             return {
                 "success": True,
                 "solution": {
@@ -102,6 +109,7 @@ class BisectionMethod:
                     "f_value": f_xl,
                     "xl_final": self.xl,
                     "xu_final": self.xu,
+                    **classification,
                 },
                 "steps": self.steps,
                 "error_message": None,
@@ -116,10 +124,10 @@ class BisectionMethod:
                 "f_expr": self.f_expr,
                 "f_xl": f_xl, "f_xu": f_xu,
                 "description": (
-                    f"Datos de entrada: f(x) = {self.f_expr}, "
+                    f"Datos de entrada: f'(x) = {self.f_expr}, "
                     f"intervalo [{self.xl}, {self.xu}], "
                     f"es = {self.es}%, imax = {self.imax}. "
-                    f"f(xu) = {f_xu:.6g} (raíz exacta en xu)."
+                    f"f'(xu) = {f_xu:.6g} (raíz exacta de f' en xu)."
                 ),
             })
             self.steps.append({
@@ -127,10 +135,11 @@ class BisectionMethod:
                 "root": root, "iterations": 0, "error": 0.0,
                 "converged": True, "reason": "raiz_exacta",
                 "description": (
-                    f"Raíz exacta encontrada en xu = {root:.6g}. "
+                    f"Punto crítico exacto encontrado en xu = {root:.6g}. "
                     f"iter = 0, ea = 0%."
                 ),
             })
+            classification = classify_critical_point(f_sym, root)
             return {
                 "success": True,
                 "solution": {
@@ -141,6 +150,7 @@ class BisectionMethod:
                     "f_value": f_xu,
                     "xl_final": self.xl,
                     "xu_final": self.xu,
+                    **classification,
                 },
                 "steps": self.steps,
                 "error_message": None,
@@ -154,9 +164,9 @@ class BisectionMethod:
                 "steps": self.steps,
                 "error_message": (
                     f"No hay cambio de signo en el intervalo: "
-                    f"f({self.xl}) = {f_xl:.6g} y f({self.xu}) = "
+                    f"f'({self.xl}) = {f_xl:.6g} y f'({self.xu}) = "
                     f"{f_xu:.6g} tienen el mismo signo. La bisección "
-                    f"requiere f(xl)*f(xu) < 0."
+                    f"requiere f'(xl)*f'(xu) < 0."
                 ),
             }
 
@@ -167,10 +177,10 @@ class BisectionMethod:
             "f_expr": self.f_expr,
             "f_xl": f_xl, "f_xu": f_xu,
             "description": (
-                f"Datos de entrada: f(x) = {self.f_expr}, "
+                f"Datos de entrada: f'(x) = {self.f_expr}, "
                 f"intervalo [{self.xl}, {self.xu}], "
                 f"es = {self.es}%, imax = {self.imax}. "
-                f"f(xl) = {f_xl:.6g}, f(xu) = {f_xu:.6g} "
+                f"f'(xl) = {f_xl:.6g}, f'(xu) = {f_xu:.6g} "
                 f"(cambio de signo verificado)."
             ),
         })
@@ -184,14 +194,16 @@ class BisectionMethod:
         reason = "max_iter"
 
         while True:
+            xl_used = xl
+            xu_used = xu
             xrold = xr
-            xr = (xl + xu) / 2.0
+            xr = (xl_used + xu_used) / 2.0
             iter_count += 1
 
             if xr != 0:
                 ea = abs((xr - xrold) / xr) * 100.0
 
-            f_xl_cur = float(f_sym.subs(x_sym, xl))
+            f_xl_cur = float(f_sym.subs(x_sym, xl_used))
             f_xr_cur = float(f_sym.subs(x_sym, xr))
             test = f_xl_cur * f_xr_cur
 
@@ -208,15 +220,16 @@ class BisectionMethod:
             self.steps.append({
                 "type": "iteration",
                 "iter": iter_count,
-                "xl": xl, "xu": xu,
+                "xl": xl_used, "xu": xu_used,
+                "xl_new": xl, "xu_new": xu,
                 "xr": xr, "xrold": xrold,
                 "ea": ea, "test": test,
                 "action": action,
                 "f_xl": f_xl_cur, "f_xr": f_xr_cur,
                 "description": (
-                    f"iter {iter_count}: xr = ({xl:.6g} + "
-                    f"{xu:.6g})/2 = {xr:.6g}  |  ea = {ea:.6g}%  "
-                    f"|  test = f({xl:.6g})*f({xr:.6g}) = "
+                    f"iter {iter_count}: xr = ({xl_used:.6g} + "
+                    f"{xu_used:.6g})/2 = {xr:.6g}  |  ea = {ea:.6g}%  "
+                    f"|  test = f'({xl_used:.6g})*f'({xr:.6g}) = "
                     f"{test:.6g}  →  {action}"
                 ),
             })
@@ -241,13 +254,14 @@ class BisectionMethod:
             "root": xr, "iterations": iter_count, "error": ea,
             "converged": converged, "reason": reason,
             "description": (
-                f"Resultado: raíz = {xr:.6g}  |  iter = "
+                f"Resultado: punto crítico x* = {xr:.6g}  |  iter = "
                 f"{iter_count}  |  ea = {ea:.6g}%  |  "
                 f"converged = {converged}  |  razón = "
                 f"{'tolerancia alcanzada' if reason == 'tolerancia' else 'raíz exacta' if reason == 'raiz_exacta' else 'máximo de iteraciones'}"
             ),
         })
 
+        classification = classify_critical_point(f_sym, xr)
         return {
             "success": True,
             "solution": {
@@ -258,6 +272,7 @@ class BisectionMethod:
                 "f_value": f_xr_final,
                 "xl_final": xl,
                 "xu_final": xu,
+                **classification,
             },
             "steps": self.steps,
             "error_message": None,

@@ -1,15 +1,17 @@
-# Método de la Secante
+# Método de la Secante aplicado a optimización
 
 ## Descripción
-Método iterativo para encontrar raíces de funciones. Similar a Newton-Raphson pero aproxima la derivada numéricamente, evitando el cálculo de f'(x).
+En optimización se resuelve f'(x) = 0. La secante es similar a
+Newton, pero aproxima f''(x) con una diferencia dividida, evitando
+calcular la segunda derivada.
 
 ## Fórmula
-x_{k+1} = x_k - f(x_k)·(x_k - x_{k-1}) / (f(x_k) - f(x_{k-1}))
+x_{k+1} = x_k - f'(x_k)·(x_k - x_{k-1}) / (f'(x_k) - f'(x_{k-1}))
 
 Requiere dos puntos iniciales x₀ y x₁.
 
 ## Parámetros
-- `func_str`: str — expresión sympy de f(x) (ej. "x**2 - 4")
+- `func_str`: str — expresión sympy de f'(x) (ej. "3*x**2 - 3")
 - `x0`: float — primera aproximación inicial
 - `x1`: float — segunda aproximación inicial
 - `tol`: float — tolerancia error relativo % (default 1e-5)
@@ -27,12 +29,13 @@ Requiere dos puntos iniciales x₀ y x₁.
 ```
 
 ## Ejemplo
+Para f(x) = x³ - 3x, la derivada es f'(x) = 3x² - 3.
 ```python
-solver = SecantRoots("x**3 - x - 2", 0.5, 1.5)
-result = solver.solve()  # solution ≈ 1.521379
+solver = SecantRoots("3*x**2 - 3", 0.5, 1.5)
+result = solver.solve()  # x* ≈ 1, f''(1)=6 > 0 → mínimo
 ```
 
 ## Limitaciones
-- Fallo si f(x_k) - f(x_{k-1}) = 0 (división por cero)
-- Convergencia superlineal (orden φ ≈ 1.618), no cuadrática como Newton
+- Fallo si f'(x_k) - f'(x_{k-1}) = 0 (división por cero)
+- Convergencia superlineal (orden ≈ 1.618), no cuadrática como Newton
 - Sensible a mala elección de x₀ y x₁
