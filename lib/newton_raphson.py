@@ -1,16 +1,17 @@
 """Newton-Raphson aplicado a optimización. Ver docs/metodos/newton_raphson.md.
 
-La entrada es la función original f(x). El método calcula f'(x) y f''(x)
-y resuelve f'(x) = 0 usando:
+La entrada es f(x) o f'(x), según ``input_type``. Si se recibe f(x), el
+método calcula f'(x) y f''(x); si se recibe f'(x), calcula f''(x). Resuelve
+f'(x) = 0 usando:
     x_{k+1} = x_k - f'(x_k) / f''(x_k)
 """
 import numpy as np
 import sympy as sp
 
 from lib.optimization_utils import (
+    build_function_spec,
     classify_critical_point,
     evaluate_expression,
-    parse_expression,
 )
 
 
@@ -21,11 +22,13 @@ def _parse_expression(func_str):
 
 class NewtonRoots:
     """Búsqueda de puntos críticos (f'(x)=0) mediante Newton-Raphson."""
-    def __init__(self, func_str, x0, tol=1e-5, max_iter=150):
+    def __init__(self, func_str, x0, tol=1e-5, max_iter=150,
+                 input_type="function"):
         self.func_str = func_str
         self.x0 = float(x0)
         self.tol = float(tol)
         self.max_iter = int(max_iter)
+        self.input_type = input_type
         self.history = []
 
     def solve(self):
@@ -33,9 +36,11 @@ class NewtonRoots:
         x = sp.Symbol("x")
 
         try:
-            original_expr = _parse_expression(self.func_str)
-            df_expr = sp.diff(original_expr, x)
-            ddf_expr = sp.diff(df_expr, x)
+            spec = build_function_spec(
+                self.func_str, input_type=self.input_type)
+            original_expr = spec["original"]
+            df_expr = spec["derivative"]
+            ddf_expr = spec["second_derivative"]
             df = sp.lambdify(x, df_expr, "numpy")
             ddf = sp.lambdify(x, ddf_expr, "numpy")
         except Exception as e:
@@ -43,13 +48,18 @@ class NewtonRoots:
                 "success": False,
                 "solution": None,
                 "steps": [],
-                "error_message": f"Error de sintaxis en la función original f(x): {str(e)}"
+                "error_message": (
+                    "Error de sintaxis en la entrada. Use '*' para "
+                    f"multiplicar y revise el tipo seleccionado: {str(e)}"
+                )
             }
 
         expr_info = {
-            "original_expr": str(original_expr),
-            "derivative_expr": str(df_expr),
-            "second_derivative_expr": str(ddf_expr),
+            "original_expr": spec["original_str"],
+            "derivative_expr": spec["derivative_str"],
+            "second_derivative_expr": spec["second_derivative_str"],
+            "input_type": spec["input_type"],
+            "original_is_antiderivative": spec["original_is_antiderivative"],
         }
 
         x_current = self.x0

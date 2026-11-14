@@ -40,13 +40,15 @@ and by launching the GUI.
 
 ## Optimización univariada
 
-Las vistas de Bisección, Newton y Secante reciben la función original
-`f(x)`. `lib/optimization_utils.py` calcula `f'(x)` y `f''(x)`, centraliza
-el parseo y clasifica el punto crítico con `f''(x*)` (mínimo, máximo o
-inconcluso). Los solvers resuelven `f'(x)=0`.
+Las vistas de Bisección, Newton y Secante permiten elegir el tipo de
+entrada: `f(x)` o `f'(x)`. `lib/optimization_utils.py` normaliza el tipo,
+calcula las derivadas y, si la entrada es `f'(x)`, integra `F(x)` con
+`C=0` solo para graficarla. Clasifica el punto crítico con `f''(x*)`
+(mínimo, máximo o inconcluso). Los solvers resuelven `f'(x)=0`.
 
-Los resultados y la API incluyen `original_expr`, `derivative_expr`,
-`second_derivative_expr`, `original_value` y `derivative_value`.
+Los resultados y la API incluyen `input_type`, `original_expr`,
+`derivative_expr`, `second_derivative_expr`, `original_value`,
+`derivative_value` y `original_is_antiderivative`.
 En las gráficas hay selector **Ambas / f(x) / f'(x)**: 2D usa doble eje Y
 cuando se muestran ambas curvas; 3D usa dos superficies separadas.
 
@@ -100,7 +102,9 @@ importan ni aparecen en la interfaz.
 7. Keep the graph's **2D / 3D** switch in both the desktop and web versions.
 8. Keep the **Ambas / f(x) / f'(x)** curve selector. In 2D use a twin Y axis
    for Ambas; in 3D use two separated surfaces.
-9. All UI text, comments, and docstrings in Spanish.
+9. Keep the **f(x) / f'(x)** input-type selector and pass `input_type` to the
+   solver. If the input is f'(x), show the integrated F(x) as C=0.
+10. All UI text, comments, and docstrings in Spanish.
 
 ## Dependencies
 

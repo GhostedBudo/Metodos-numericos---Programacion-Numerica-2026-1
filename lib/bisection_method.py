@@ -1,15 +1,14 @@
 """Método de Bisección aplicado a optimización. Ver docs/metodos/bisection.md.
 
-La entrada es la función original f(x). El método calcula f'(x) y resuelve
+La entrada es f(x) o f'(x), según ``input_type``. Si se recibe f(x), el
+método calcula f'(x); si se recibe f'(x), la usa directamente. Resuelve
 f'(x) = 0. Dado [xl, xu] con f'(xl)*f'(xu) < 0, divide el intervalo por
 mitades hasta que ea < es o iter >= imax.
 """
-import sympy as sp
-
 from lib.optimization_utils import (
+    build_function_spec,
     classify_critical_point,
     evaluate_expression,
-    parse_expression,
 )
 
 
@@ -17,15 +16,17 @@ class BisectionMethod:
     """
     Método de bisección para hallar puntos críticos de una función.
 
-    Recibe f(x). Calcula f'(x) y busca x* donde f'(x*) = 0 dentro de
-    [xl, xu]. Requiere que f'(xl) y f'(xu) tengan signos opuestos.
+    Recibe f(x) o f'(x). Busca x* donde f'(x*) = 0 dentro de [xl, xu].
+    Requiere que f'(xl) y f'(xu) tengan signos opuestos.
     """
-    def __init__(self, f_expr, xl, xu, es=0.01, imax=100):
+    def __init__(self, f_expr, xl, xu, es=0.01, imax=100,
+                 input_type="function"):
         self.xl = float(xl)
         self.xu = float(xu)
         self.es = float(es)
         self.imax = int(imax)
         self.f_expr = f_expr
+        self.input_type = input_type
         self.steps = []
 
     def solve(self):
@@ -43,26 +44,29 @@ class BisectionMethod:
                 ),
             }
 
-        x_sym = sp.Symbol("x")
         try:
-            original_sym = parse_expression(self.f_expr)
-            f_sym = sp.diff(original_sym, x_sym)
-            second_sym = sp.diff(f_sym, x_sym)
+            spec = build_function_spec(
+                self.f_expr, input_type=self.input_type)
+            original_sym = spec["original"]
+            f_sym = spec["derivative"]
+            second_sym = spec["second_derivative"]
         except Exception:
             return {
                 "success": False,
                 "solution": None,
                 "steps": self.steps,
                 "error_message": (
-                    f"No se pudo interpretar la función original f(x) = "
-                    f"'{self.f_expr}'. Verifique la sintaxis."
+                    f"No se pudo interpretar la entrada '{self.f_expr}'. "
+                    f"Verifique la sintaxis y el tipo de entrada."
                 ),
             }
 
         expr_info = {
-            "original_expr": str(original_sym),
-            "derivative_expr": str(f_sym),
-            "second_derivative_expr": str(second_sym),
+            "original_expr": spec["original_str"],
+            "derivative_expr": spec["derivative_str"],
+            "second_derivative_expr": spec["second_derivative_str"],
+            "input_type": spec["input_type"],
+            "original_is_antiderivative": spec["original_is_antiderivative"],
         }
 
         if self.xl >= self.xu:

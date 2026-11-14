@@ -121,6 +121,20 @@ def test_error_xl_mayor_xu():
     print("OK test_error_xl_mayor_xu")
 
 
+def test_entrada_derivada():
+    """Si el usuario escribe f'(x), se integra para mostrar F(x) (C=0)."""
+    res = BisectionMethod(
+        "3*x**2 - 3", 0.0, 1.5, input_type="derivative").solve()
+    assert res["success"] is True, res.get("error_message")
+    sol = res["solution"]
+    assert aprox_igual(sol["root"], 1.0)
+    assert sol["input_type"] == "derivative"
+    assert sol["original_is_antiderivative"] is True
+    assert sol["original_expr"] == "x**3 - 3*x"
+    assert aprox_igual(sol["original_value"], -2.0)
+    print("OK test_entrada_derivada")
+
+
 def test_error_f_expr_vacia():
     """Caso de error: f(x) vacía o None."""
     res1 = BisectionMethod("", 0.0, 1.0).solve()
@@ -168,6 +182,7 @@ if __name__ == "__main__":
     test_defaults()
     test_error_f_expr_no_parseable()
     test_error_xl_mayor_xu()
+    test_entrada_derivada()
     test_error_f_expr_vacia()
     test_pasos_generados()
     test_contenido_step_iteracion()

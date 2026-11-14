@@ -34,7 +34,7 @@ python3 -m venv .venv
 ## Versión web móvil
 
 La carpeta `webapp/` contiene una versión web responsive para usar desde
-el navegador del celular. Recibe `f(x)`, calcula `f'(x)` y `f''(x)`,
+el navegador del celular. Permite elegir el tipo de entrada **f(x) / f'(x)**,
 incluye glosario, tabla de iteraciones, alternancia de gráfica **2D / 3D**
 y selector de curva **Ambas / f(x) / f'(x)**. Plotly se sirve localmente,
 así que las gráficas funcionan sin conexión a internet.
@@ -77,20 +77,25 @@ sirve la versión web móvil en `/` y la API en `/api/solve`.
 
 ## Optimización univariada (f'(x) = 0)
 
-Las vistas de **Bisección**, **Newton** y **Secante** reciben la
-**función original `f(x)`**. El programa calcula automáticamente `f'(x)` y
-`f''(x)`, resuelve `f'(x) = 0` para encontrar puntos críticos `x*` y usa
-`f''(x*)` para clasificarlos:
+Las vistas de **Bisección**, **Newton** y **Secante** permiten elegir el
+tipo de entrada:
+
+- **f(x)**: el programa calcula automáticamente `f'(x)` y `f''(x)`.
+- **f'(x)**: el programa usa la derivada dada, calcula `f''(x)` e integra
+  `F(x)` con constante `C=0` para poder graficarla.
+
+En ambos casos se resuelve `f'(x) = 0` para encontrar puntos críticos `x*`
+y se usa `f''(x*)` para clasificarlos:
 
 - `f''(x*) > 0` → mínimo local.
 - `f''(x*) < 0` → máximo local.
 - `f''(x*) ≈ 0` → criterio inconcluso.
 
-Newton usa `x(k+1) = x(k) - f'(x(k)) / f''(x(k))`, donde ambas derivadas
-se obtienen simbólicamente desde `f(x)`.
+Newton usa `x(k+1) = x(k) - f'(x(k)) / f''(x(k))`, donde las derivadas se
+obtienen simbólicamente según el tipo de entrada.
 
-En la gráfica se pueden mostrar **ambas curvas** (`f(x)` en verde y
-`f'(x)` en azul) o una sola con el selector **Ambas / f(x) / f'(x)**.
+En la gráfica se pueden mostrar **ambas curvas** (`f(x)` o `F(x)` en verde
+y `f'(x)` en azul) o una sola con el selector **Ambas / f(x) / f'(x)**.
 En 2D con Ambas se usa doble eje Y; en 3D se dibujan dos superficies
 separadas.
 
@@ -133,9 +138,9 @@ se importan al arrancar.
 
 | Método | Entrada | Autor |
 |--------|---------|-------|
-| Bisección | `f(x)` → calcula `f'(x)` | Raimir Linarez |
-| Newton | `f(x)` → calcula `f'(x)`, `f''(x)` | Carlos Paradas |
-| Secante | `f(x)` → calcula `f'(x)` | Carlos Paradas |
+| Bisección | `f(x)` o `f'(x)` | Raimir Linarez |
+| Newton | `f(x)` o `f'(x)` | Carlos Paradas |
+| Secante | `f(x)` o `f'(x)` | Carlos Paradas |
 
 ## Cómo agregar un nuevo método numérico
 

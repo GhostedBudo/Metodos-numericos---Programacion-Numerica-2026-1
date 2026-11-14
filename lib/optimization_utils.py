@@ -46,22 +46,60 @@ def parse_expression(expr_str):
     )
 
 
-def build_function_spec(func_str):
-    """Calcula f(x), f'(x) y f''(x) a partir de la función original.
+def normalize_input_type(input_type):
+    """Normaliza el tipo de entrada: ``function`` o ``derivative``."""
+    value = str(input_type or "function").strip().lower()
+    if value in {"function", "f", "fx", "f(x)", "original", "funcion", "función"}:
+        return "function"
+    if value in {
+        "derivative", "f'", "f'(x)", "fprime", "f_prima", "derivada",
+    }:
+        return "derivative"
+    raise ValueError(
+        "Tipo de entrada inválido. Use 'function' (f(x)) o "
+        "'derivative' (f'(x))."
+    )
 
-    Devuelve un diccionario con las expresiones simbólicas y sus textos.
+
+def build_function_spec(func_str, input_type="function"):
+    """Construye f(x), f'(x) y f''(x) según el tipo de entrada.
+
+    Si ``input_type`` es ``function``, el usuario escribe f(x) y las
+    derivadas se calculan simbólicamente. Si es ``derivative``, el usuario
+    escribe f'(x); la segunda derivada se calcula y f(x) se reconstruye
+    integrando con constante de integración 0 (solo para visualización).
     """
     x = sp.Symbol("x")
-    original = parse_expression(func_str)
-    derivative = sp.diff(original, x)
-    second_derivative = sp.diff(derivative, x)
+    kind = normalize_input_type(input_type)
+    entry = parse_expression(func_str)
+
+    if kind == "derivative":
+        derivative = entry
+        second_derivative = sp.diff(derivative, x)
+        try:
+            original = sp.integrate(derivative, x)
+            if original.has(sp.Integral):
+                original = None
+        except Exception:
+            original = None
+        original_is_antiderivative = original is not None
+    else:
+        original = entry
+        derivative = sp.diff(original, x)
+        second_derivative = sp.diff(derivative, x)
+        original_is_antiderivative = False
+
     return {
+        "input_type": kind,
         "original": original,
         "derivative": derivative,
         "second_derivative": second_derivative,
-        "original_str": str(original),
+        "original_str": (
+            str(original) if original is not None else "no disponible"
+        ),
         "derivative_str": str(derivative),
         "second_derivative_str": str(second_derivative),
+        "original_is_antiderivative": original_is_antiderivative,
     }
 
 

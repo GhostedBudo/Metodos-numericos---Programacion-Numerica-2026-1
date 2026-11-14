@@ -115,9 +115,12 @@ def _secant_table(history):
 
 
 def _bisection_steps_text(steps, solution):
+    original_name = (
+        "F(x)" if solution.get("original_is_antiderivative") else "f(x)"
+    )
     lines = [
         "PROCEDIMIENTO — BISECCIÓN SOBRE f'(x)",
-        f"f(x) = {solution.get('original_expr', '---')}",
+        f"{original_name} = {solution.get('original_expr', '---')}",
         f"f'(x) = {solution.get('derivative_expr', '---')}",
         "Objetivo: hallar x* donde f'(x*) = 0.",
         "",
@@ -136,7 +139,7 @@ def _bisection_steps_text(steps, solution):
         if step.get("type") == "initial":
             lines.extend([
                 "DATOS INICIALES",
-                f"  f(x) = {solution.get('original_expr', '---')}",
+                f"  {original_name} = {solution.get('original_expr', '---')}",
                 f"  f'(x) = {step['f_expr']}",
                 f"  Intervalo = [{_fmt(step['xl'])}, {_fmt(step['xu'])}]",
                 f"  f'(xl) = {_fmt(step['f_xl'])}",
@@ -169,7 +172,7 @@ def _bisection_steps_text(steps, solution):
                 f"  x* ≈ {_fmt(step['root'])}",
                 f"  Iteraciones = {step['iterations']}",
                 f"  ea final = {_fmt(step['error'])}%",
-                f"  f(x*) = {_fmt(solution.get('original_value'))}",
+                f"  {original_name}* = {_fmt(solution.get('original_value'))}",
                 f"  f'(x*) = {_fmt(solution['f_value'])}",
                 f"  f''(x*) = {_fmt(solution.get('second_derivative'))}",
                 f"  Clasificación: {solution.get('critical_type', 'inconcluso')}",
@@ -179,9 +182,12 @@ def _bisection_steps_text(steps, solution):
 
 
 def _newton_steps_text(history, second_fn, result):
+    original_name = (
+        "F(x)" if result.get("original_is_antiderivative") else "f(x)"
+    )
     lines = [
         "PROCEDIMIENTO — NEWTON SOBRE f'(x)",
-        f"f(x) = {result.get('original_expr', '---')}",
+        f"{original_name} = {result.get('original_expr', '---')}",
         f"f'(x) = {result.get('derivative_expr', '---')}",
         f"f''(x) = {result.get('second_derivative_expr', '---')}",
         "Objetivo: resolver f'(x) = 0.",
@@ -224,7 +230,7 @@ def _newton_steps_text(history, second_fn, result):
         "═" * 60,
         "RESULTADO FINAL",
         f"  x* ≈ {_fmt(final['x'])}",
-        f"  f(x*) = {_fmt(result.get('original_value'))}",
+        f"  {original_name}* = {_fmt(result.get('original_value'))}",
         f"  f'(x*) = {_fmt(final['fx'])}",
         f"  f''(x*) = {_fmt(result.get('second_derivative'))}",
         f"  Clasificación: {result.get('critical_type', 'inconcluso')}",
@@ -234,9 +240,12 @@ def _newton_steps_text(history, second_fn, result):
 
 
 def _secant_steps_text(history, result):
+    original_name = (
+        "F(x)" if result.get("original_is_antiderivative") else "f(x)"
+    )
     lines = [
         "PROCEDIMIENTO — SECANTE SOBRE f'(x)",
-        f"f(x) = {result.get('original_expr', '---')}",
+        f"{original_name} = {result.get('original_expr', '---')}",
         f"f'(x) = {result.get('derivative_expr', '---')}",
         f"f''(x) = {result.get('second_derivative_expr', '---')}",
         "Objetivo: resolver f'(x) = 0 sin calcular f''(x).",
@@ -278,7 +287,7 @@ def _secant_steps_text(history, result):
         "═" * 60,
         "RESULTADO FINAL",
         f"  x* ≈ {_fmt(final['x'])}",
-        f"  f(x*) = {_fmt(result.get('original_value'))}",
+        f"  {original_name}* = {_fmt(result.get('original_value'))}",
         f"  f'(x*) = {_fmt(final['fx'])}",
         f"  f''(x*) = {_fmt(result.get('second_derivative'))}",
         f"  Clasificación: {result.get('critical_type', 'inconcluso')}",
@@ -310,7 +319,9 @@ def solve():
 
     expr_str = str(payload.get("expr", "")).strip()
     if not expr_str:
-        return _error_response("Escribe la función original f(x).", method)
+        return _error_response("Escribe f(x) o f'(x), según el tipo de entrada.", method)
+
+    input_type = str(payload.get("input_type", "function")).strip().lower()
 
     try:
         if method == "bisection":
@@ -318,18 +329,22 @@ def solve():
             xu = float(payload.get("xu"))
             es = float(payload.get("es", 0.01))
             imax = int(payload.get("imax", 100))
-            solver = BisectionMethod(expr_str, xl, xu, es=es, imax=imax)
+            solver = BisectionMethod(
+                expr_str, xl, xu, es=es, imax=imax,
+                input_type=input_type)
         elif method == "newton":
             x0 = float(payload.get("x0"))
             tol = float(payload.get("tol", 1e-5))
             max_iter = int(payload.get("max_iter", 150))
-            solver = NewtonRoots(expr_str, x0, tol, max_iter)
+            solver = NewtonRoots(
+                expr_str, x0, tol, max_iter, input_type=input_type)
         else:
             x0 = float(payload.get("x0"))
             x1 = float(payload.get("x1"))
             tol = float(payload.get("tol", 1e-5))
             max_iter = int(payload.get("max_iter", 150))
-            solver = SecantRoots(expr_str, x0, x1, tol, max_iter)
+            solver = SecantRoots(
+                expr_str, x0, x1, tol, max_iter, input_type=input_type)
     except (TypeError, ValueError) as exc:
         return _error_response(f"Datos numéricos inválidos: {exc}", method)
 
@@ -341,10 +356,10 @@ def solve():
         )
 
     try:
-        spec = build_function_spec(expr_str)
+        spec = build_function_spec(expr_str, input_type=input_type)
     except Exception as exc:
         return _error_response(
-            f"No se pudieron calcular f'(x) y f''(x): {exc}",
+            f"No se pudieron calcular las derivadas: {exc}",
             method,
         )
 
@@ -430,6 +445,11 @@ def solve():
     derivative_value = derivative_fn(final_x)
     original_curve = _curve_data(spec["original"], domain[0], domain[1])
     derivative_curve = _curve_data(spec["derivative"], domain[0], domain[1])
+    original_prefix = "F(x)" if spec["original_is_antiderivative"] else "f(x)"
+    original_label = (
+        f"{original_prefix} = {spec['original_str']}"
+        + (" (C=0)" if spec["original_is_antiderivative"] else "")
+    )
     return jsonify({
         "success": True,
         "method": method,
@@ -450,6 +470,8 @@ def solve():
             "original_expr": spec["original_str"],
             "derivative_expr": spec["derivative_str"],
             "second_derivative_expr": spec["second_derivative_str"],
+            "input_type": spec["input_type"],
+            "original_is_antiderivative": spec["original_is_antiderivative"],
         },
         "steps_text": steps_text,
         "table": table,
@@ -457,7 +479,7 @@ def solve():
             "curve": derivative_curve,
             "original_curve": original_curve,
             "derivative_curve": derivative_curve,
-            "original_label": f"f(x) = {spec['original_str']}",
+            "original_label": original_label,
             "derivative_label": f"f'(x) = {spec['derivative_str']}",
             "iterations": iter_points,
             "final": {

@@ -1,6 +1,7 @@
 """Método de la Secante aplicado a optimización. Ver docs/metodos/secante.md.
 
-La entrada es la función original f(x). El método calcula f'(x) y resuelve
+La entrada es f(x) o f'(x), según ``input_type``. Si se recibe f(x), el
+método calcula f'(x); si se recibe f'(x), la usa directamente. Resuelve
 f'(x) = 0 sin calcular f''(x) en las iteraciones:
     x_{k+1} = x_k - f'(x_k) * (x_k - x_{k-1}) / (f'(x_k) - f'(x_{k-1}))
 """
@@ -8,9 +9,9 @@ import numpy as np
 import sympy as sp
 
 from lib.optimization_utils import (
+    build_function_spec,
     classify_critical_point,
     evaluate_expression,
-    parse_expression,
 )
 
 
@@ -21,12 +22,14 @@ def _parse_expression(func_str):
 
 class SecantRoots:
     """Búsqueda de puntos críticos (f'(x)=0) mediante la Secante."""
-    def __init__(self, func_str, x0, x1, tol=1e-5, max_iter=150):
+    def __init__(self, func_str, x0, x1, tol=1e-5, max_iter=150,
+                 input_type="function"):
         self.func_str = func_str
         self.x0 = float(x0)
         self.x1 = float(x1)
         self.tol = float(tol)
         self.max_iter = int(max_iter)
+        self.input_type = input_type
         self.history = []
 
     def solve(self):
@@ -34,19 +37,22 @@ class SecantRoots:
         x = sp.Symbol("x")
 
         try:
-            original_expr = _parse_expression(self.func_str)
-            df_expr = sp.diff(original_expr, x)
-            ddf_expr = sp.diff(df_expr, x)
+            spec = build_function_spec(
+                self.func_str, input_type=self.input_type)
+            original_expr = spec["original"]
+            df_expr = spec["derivative"]
+            ddf_expr = spec["second_derivative"]
             df = sp.lambdify(x, df_expr, "numpy")
         except Exception as e:
             err_msg = str(e)
             if "could not parse" in err_msg:
                 msg = (
-                    "Error de sintaxis en la función original. Asegúrese de "
-                    "usar '*' para multiplicaciones (ej. '2*x' en lugar de '2x')."
+                    "Error de sintaxis en la entrada. Asegúrese de usar '*' "
+                    "para multiplicaciones (ej. '2*x' en lugar de '2x') y "
+                    "revise el tipo seleccionado."
                 )
             else:
-                msg = f"Error al procesar la función original f(x): {err_msg}"
+                msg = f"Error al procesar la entrada: {err_msg}"
             return {
                 "success": False,
                 "solution": None,
@@ -55,9 +61,11 @@ class SecantRoots:
             }
 
         expr_info = {
-            "original_expr": str(original_expr),
-            "derivative_expr": str(df_expr),
-            "second_derivative_expr": str(ddf_expr),
+            "original_expr": spec["original_str"],
+            "derivative_expr": spec["derivative_str"],
+            "second_derivative_expr": spec["second_derivative_str"],
+            "input_type": spec["input_type"],
+            "original_is_antiderivative": spec["original_is_antiderivative"],
         }
 
         x_prev = self.x0

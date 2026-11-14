@@ -48,6 +48,18 @@ def test_secant():
     print("\nTodas las pruebas de Secante completaron correctamente.")
 
 
+def test_entrada_derivada():
+    result = SecantRoots(
+        "3*x**2 - 3", 0.5, 1.5, tol=1e-8,
+        input_type="derivative").solve()
+    assert result["success"] is True, result.get("error_message")
+    assert aproxima(result["solution"], 1.0)
+    assert result["input_type"] == "derivative"
+    assert result["original_is_antiderivative"] is True
+    assert result["original_expr"] == "x**3 - 3*x"
+    print("OK test_entrada_derivada")
+
+
 def test_error_sintaxis():
     result = SecantRoots("2*x +", 1.0, 2.0).solve()
     assert result["success"] is False
@@ -70,6 +82,7 @@ def test_error_funcion_vacia():
 
 if __name__ == "__main__":
     test_secant()
+    test_entrada_derivada()
     test_error_sintaxis()
     test_error_puntos_iguales()
     test_error_funcion_vacia()

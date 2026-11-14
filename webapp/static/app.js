@@ -3,6 +3,7 @@ const state = {
   data: null,
   graphMode: "2d",
   curveMode: "both",
+  inputType: "function",
   activeTab: "summary",
   loading: false,
 };
@@ -93,6 +94,15 @@ function setCurveMode(mode) {
   renderGraph();
 }
 
+function setInputType(type) {
+  state.inputType = type;
+  $("#btnInputFunction").classList.toggle("active", type === "function");
+  $("#btnInputDerivative").classList.toggle("active", type === "derivative");
+  $("#inputTypeHint").textContent = type === "function"
+    ? "Escribes f(x). El sistema calcula f'(x) y f''(x)."
+    : "Escribes f'(x). El sistema calcula f''(x) e integra F(x) con C=0.";
+}
+
 function showError(message) {
   const box = $("#errorBox");
   box.textContent = message;
@@ -125,6 +135,7 @@ function readPayload() {
     return {
       method: "bisection",
       expr: val("b_expr"),
+      input_type: state.inputType,
       xl: val("b_xl"),
       xu: val("b_xu"),
       es: val("b_es"),
@@ -135,6 +146,7 @@ function readPayload() {
     return {
       method: "newton",
       expr: val("n_expr"),
+      input_type: state.inputType,
       x0: val("n_x0"),
       tol: val("n_tol"),
       max_iter: val("n_max"),
@@ -145,6 +157,7 @@ function readPayload() {
   return {
     method: "secant",
     expr: val("s_expr"),
+    input_type: state.inputType,
     x0: val("s_x0"),
     x1: val("s_x1"),
     tol: val("s_tol"),
@@ -197,6 +210,7 @@ async function calculate() {
 
 function renderSummary(data) {
   const summary = data.summary;
+  const originalName = summary.original_is_antiderivative ? "F" : "f";
   const finalInterval = summary.xl_final !== null && summary.xl_final !== undefined
     ? `${fmt(summary.xl_final)} a ${fmt(summary.xu_final)}`
     : "No aplica";
@@ -205,7 +219,7 @@ function renderSummary(data) {
     ["x* (punto crítico)", fmt(summary.root, 10)],
     ["Iteraciones", summary.iterations],
     ["Error final ea", `${fmt(summary.error, 8)} %`],
-    ["f(x*)", fmt(summary.original_value, 8)],
+    [`${originalName}(x*)`, fmt(summary.original_value, 8)],
     ["f'(x*)", fmt(summary.derivative_value ?? summary.f_value, 8)],
     ["f''(x*)", fmt(summary.second_derivative, 8)],
     ["Clasificación", summary.critical_type || "inconcluso"],
@@ -227,9 +241,16 @@ function renderSummary(data) {
     ? `<div class="classification">${escapeHtml(summary.classification)}</div>`
     : "";
 
+  const originalLabel = summary.original_is_antiderivative
+    ? "F(x) (C=0)"
+    : "f(x)";
+  const inputLabel = summary.input_type === "derivative"
+    ? "Entrada: f'(x)"
+    : "Entrada: f(x)";
   const formulas = `
     <div class="summary-formulas">
-      <p>f(x) = <code>${escapeHtml(summary.original_expr)}</code></p>
+      <p>${escapeHtml(inputLabel)}</p>
+      <p>${escapeHtml(originalLabel)} = <code>${escapeHtml(summary.original_expr)}</code></p>
       <p>f'(x) = <code>${escapeHtml(summary.derivative_expr)}</code></p>
       <p>f''(x) = <code>${escapeHtml(summary.second_derivative_expr)}</code></p>
     </div>
@@ -631,13 +652,13 @@ function renderGraph() {
     ? "Ambas curvas"
     : (state.curveMode === "original" ? "Solo f(x)" : "Solo f'(x)");
   if (state.graphMode === "3d") {
-    legend.textContent = `${modeLabel}. Vista 3D: verde = f(x), azul = f'(x). `
+    legend.textContent = `${modeLabel}. Vista 3D: verde = f(x) o F(x), azul = f'(x). `
       + "En Ambas las superficies se separan en bandas. La línea naranja son "
       + "las iteraciones y la estrella verde es x*.";
     plot3D(state.data);
   } else {
     legend.textContent = `${modeLabel}. Eje x = valores de x. `
-      + "En Ambas, eje izquierdo = f(x) (verde) y eje derecho = f'(x) (azul). "
+      + "En Ambas, eje izquierdo = f(x) o F(x) (verde) y eje derecho = f'(x) (azul). "
       + "Línea punteada = f'(x)=0. Puntos naranjas = iteraciones. "
       + "Estrella verde = x*. Zona sombreada = intervalo inicial [xl, xu].";
     plot2D(state.data);
@@ -658,6 +679,8 @@ $("#btn3d").addEventListener("click", () => setGraphMode("3d"));
 $("#btnBoth").addEventListener("click", () => setCurveMode("both"));
 $("#btnOriginal").addEventListener("click", () => setCurveMode("original"));
 $("#btnDerivative").addEventListener("click", () => setCurveMode("derivative"));
+$("#btnInputFunction").addEventListener("click", () => setInputType("function"));
+$("#btnInputDerivative").addEventListener("click", () => setInputType("derivative"));
 
 window.addEventListener("resize", () => {
   if (state.data && state.activeTab === "graph" && window.Plotly) {

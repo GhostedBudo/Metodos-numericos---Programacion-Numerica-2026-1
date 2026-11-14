@@ -26,11 +26,20 @@
   <main class="layout">
     <section class="card input-card">
       <h2 id="formTitle">Bisección</h2>
-      <p class="hint" id="formHint">Requiere un intervalo [xl, xu] con cambio de signo en f'(x), calculada desde f(x).</p>
+      <p class="hint" id="formHint">Requiere un intervalo [xl, xu] con cambio de signo en f'(x).</p>
+
+      <div class="input-type-row">
+        <span>Tipo de entrada:</span>
+        <div class="segmented" role="group" aria-label="Tipo de entrada">
+          <button type="button" id="btnInputFunction" class="active">f(x)</button>
+          <button type="button" id="btnInputDerivative">f'(x)</button>
+        </div>
+      </div>
+      <p class="hint" id="inputTypeHint">Escribes f(x). El sistema calcula f'(x) y f''(x).</p>
 
       <form id="bisectionForm" class="method-form active" data-method="bisection">
         <label class="field">
-          <span>Función original f(x)</span>
+          <span>Entrada: f(x) o f'(x)</span>
           <input id="b_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
         </label>
         <div class="two-cols">
@@ -43,7 +52,7 @@
 
       <form id="newtonForm" class="method-form" data-method="newton">
         <label class="field">
-          <span>Función original f(x)</span>
+          <span>Entrada: f(x) o f'(x)</span>
           <input id="n_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
         </label>
         <div class="two-cols">
@@ -57,7 +66,7 @@
 
       <form id="secantForm" class="method-form" data-method="secant">
         <label class="field">
-          <span>Función original f(x)</span>
+          <span>Entrada: f(x) o f'(x)</span>
           <input id="s_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
         </label>
         <div class="two-cols">
@@ -72,7 +81,7 @@
 
       <button type="button" class="primary" id="calcBtn">Calcular</button>
       <div id="errorBox" class="error hidden" role="alert"></div>
-      <p class="hint">Escribe f(x). El sistema calcula f'(x) y f''(x). Usa <code>*</code> para multiplicar. Acepta <code>sen</code>, <code>ln</code>, <code>e</code>, <code>^</code>.</p>
+      <p class="hint">Elige el tipo: si escribes f(x), se derivan f' y f''; si escribes f'(x), se integra F(x) con C=0 para graficarla. Usa <code>*</code> para multiplicar. Acepta <code>sen</code>, <code>ln</code>, <code>e</code>, <code>^</code>.</p>
     </section>
 
     <section class="card output-card">
@@ -123,7 +132,7 @@
         </div>
         <div id="plot" class="plot"></div>
         <p class="legend" id="graphLegend">
-          Eje x = valores de x. Curva verde = f(x). Curva azul = f'(x). Línea punteada = f'(x)=0.
+          Eje x = valores de x. Curva verde = f(x) o F(x). Curva azul = f'(x). Línea punteada = f'(x)=0.
           Puntos naranjas = iteraciones. Estrella verde = x*.
         </p>
       </div>
@@ -137,8 +146,10 @@
             <dt>xr</dt><dd>Punto medio (xl + xu)/2. Aproximación del punto crítico.</dd>
             <dt>x_i / x(k)</dt><dd>Aproximación actual dentro de Newton o Secante.</dd>
             <dt>x*</dt><dd>Punto crítico final donde f'(x*) ≈ 0.</dd>
-            <dt>f(x)</dt><dd>Función original que escribe el usuario. Se grafica en verde.</dd>
-            <dt>f'(x)</dt><dd>Primera derivada calculada automáticamente. Resolver f'(x)=0 busca mínimos o máximos.</dd>
+            <dt>Tipo de entrada</dt><dd>Elige f(x) o f'(x). Si escribes f(x), se derivan f' y f''. Si escribes f'(x), se integra F(x) con C=0 para graficarla.</dd>
+            <dt>f(x)</dt><dd>Función original. Se grafica en verde.</dd>
+            <dt>F(x)</dt><dd>Antiderivada de f'(x) cuando la entrada es la derivada. Solo para visualización, C=0.</dd>
+            <dt>f'(x)</dt><dd>Primera derivada. Resolver f'(x)=0 busca mínimos o máximos.</dd>
             <dt>f''(x*)</dt><dd>Segunda derivada en x*. &gt;0 mínimo, &lt;0 máximo, ≈0 inconcluso.</dd>
             <dt>fp</dt><dd>Abreviatura de f'(x) en las tablas.</dd>
             <dt>fpp</dt><dd>Abreviatura de f''(x) en las tablas.</dd>

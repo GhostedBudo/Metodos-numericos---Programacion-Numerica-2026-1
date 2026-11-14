@@ -81,40 +81,53 @@ class BisectionMethodView(ctk.CTkFrame):
         config_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=20)
         config_frame.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(config_frame, text="f(x):", font=self.label_font, text_color=COLOR_TEXT).grid(
+        ctk.CTkLabel(config_frame, text="Tipo de entrada:", font=self.label_font, text_color=COLOR_TEXT).grid(
             row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.input_type_switch = ctk.CTkSegmentedButton(
+            config_frame, values=["f(x)", "f'(x)"], command=self._on_input_type,
+            font=self.label_font,
+            selected_color=COLOR_ACCENT, selected_hover_color=COLOR_ACCENT_HOVER,
+            unselected_color=COLOR_BG, unselected_hover_color=COLOR_BORDER,
+            text_color=COLOR_TEXT, corner_radius=8
+        )
+        self.input_type_switch.set("f(x)")
+        self.input_type_switch.grid(row=0, column=1, sticky="w", pady=(0, 6))
+        self.input_type = "function"
+
+        ctk.CTkLabel(config_frame, text="Entrada (f(x) o f'(x)):", font=self.label_font, text_color=COLOR_TEXT).grid(
+            row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         self.entry_func = ctk.CTkEntry(config_frame, font=self.label_font, fg_color=COLOR_BG,
                                        border_color=COLOR_INTERACTIVE_BORDER, text_color=COLOR_TEXT)
-        self.entry_func.grid(row=0, column=1, sticky="ew", pady=(0, 6))
+        self.entry_func.grid(row=1, column=1, sticky="ew", pady=(0, 6))
 
         ctk.CTkLabel(config_frame, text="xl:", font=self.label_font, text_color=COLOR_TEXT).grid(
-            row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+            row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         self.entry_xl = ctk.CTkEntry(config_frame, font=self.label_font, fg_color=COLOR_BG,
                                      border_color=COLOR_INTERACTIVE_BORDER, text_color=COLOR_TEXT, width=120)
-        self.entry_xl.grid(row=1, column=1, sticky="w", pady=(0, 6))
+        self.entry_xl.grid(row=2, column=1, sticky="w", pady=(0, 6))
 
         ctk.CTkLabel(config_frame, text="xu:", font=self.label_font, text_color=COLOR_TEXT).grid(
-            row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+            row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         self.entry_xu = ctk.CTkEntry(config_frame, font=self.label_font, fg_color=COLOR_BG,
                                      border_color=COLOR_INTERACTIVE_BORDER, text_color=COLOR_TEXT, width=120)
-        self.entry_xu.grid(row=2, column=1, sticky="w", pady=(0, 6))
+        self.entry_xu.grid(row=3, column=1, sticky="w", pady=(0, 6))
 
         ctk.CTkLabel(config_frame, text="es (%):", font=self.label_font, text_color=COLOR_TEXT).grid(
-            row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+            row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         self.entry_es = ctk.CTkEntry(config_frame, font=self.label_font, fg_color=COLOR_BG,
                                      border_color=COLOR_INTERACTIVE_BORDER, text_color=COLOR_TEXT, width=120)
         self.entry_es.insert(0, "0.01")
-        self.entry_es.grid(row=3, column=1, sticky="w", pady=(0, 6))
+        self.entry_es.grid(row=4, column=1, sticky="w", pady=(0, 6))
 
         ctk.CTkLabel(config_frame, text="imax:", font=self.label_font, text_color=COLOR_TEXT).grid(
-            row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+            row=5, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         self.entry_imax = ctk.CTkEntry(config_frame, font=self.label_font, fg_color=COLOR_BG,
                                        border_color=COLOR_INTERACTIVE_BORDER, text_color=COLOR_TEXT, width=120)
         self.entry_imax.insert(0, "100")
-        self.entry_imax.grid(row=4, column=1, sticky="w", pady=(0, 6))
+        self.entry_imax.grid(row=5, column=1, sticky="w", pady=(0, 6))
 
         ctk.CTkLabel(config_frame, text="Ejemplo:", font=self.label_font, text_color=COLOR_TEXT).grid(
-            row=5, column=0, sticky="w", padx=(0, 8))
+            row=6, column=0, sticky="w", padx=(0, 8))
         self.preset_combo = ctk.CTkComboBox(
             config_frame,
             values=["Manual", "x²−4x+1 en [0,3]", "x³−3x en [0,1.5]", "sin(x)+0.5x en [0,4]"],
@@ -126,7 +139,7 @@ class BisectionMethodView(ctk.CTkFrame):
             font=self.label_font, corner_radius=8
         )
         self.preset_combo.set("Manual")
-        self.preset_combo.grid(row=5, column=1, sticky="ew")
+        self.preset_combo.grid(row=6, column=1, sticky="ew")
 
         actions_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         actions_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=20)
@@ -318,13 +331,13 @@ class BisectionMethodView(ctk.CTkFrame):
         if self.graph_mode == "3D":
             text = (
                 "Eje x = x.  Eje y = separación de curvas.  Eje z = valor.\n"
-                "Superficie verde = f(x).  Superficie azul = f'(x).\n"
+                "Superficie verde = f(x) o F(x).  Superficie azul = f'(x).\n"
                 "Superficie gris = f'(x)=0.  Línea naranja = iterados.\n"
                 "Estrella verde = x* final sobre cada curva."
             )
         else:
             text = (
-                "Curva verde = f(x).  Curva azul = f'(x).  Línea negra = f'(x)=0.\n"
+                "Curva verde = f(x) o F(x) (C=0).  Curva azul = f'(x).  Línea negra = f'(x)=0.\n"
                 "En 'Ambas' se usa doble eje Y: izquierdo f(x), derecho f'(x).\n"
                 "Puntos naranjas = iteraciones.  Estrella verde = x* final.\n"
                 "Zona azul sombreada = intervalo inicial [xl, xu]."
@@ -357,6 +370,9 @@ class BisectionMethodView(ctk.CTkFrame):
         txt_glossary.insert("1.0", GLOSSARY_TEXT)
         txt_glossary.configure(state="disabled")
 
+    def _on_input_type(self, value):
+        self.input_type = "function" if value == "f(x)" else "derivative"
+
     # --- Lógica de presets ---
     def on_preset(self, value):
         if value == "x²−4x+1 en [0,3]":
@@ -377,6 +393,8 @@ class BisectionMethodView(ctk.CTkFrame):
             func, xl, xu = "sin(x) + 0.5*x", 0.0, 4.0
         else:
             return
+        self.input_type = "function"
+        self.input_type_switch.set("f(x)")
         self.entry_func.delete(0, "end")
         self.entry_func.insert(0, func)
         self.entry_xl.delete(0, "end")
@@ -405,7 +423,9 @@ class BisectionMethodView(ctk.CTkFrame):
             messagebox.showerror("Error de entrada", "xl, xu, es deben ser numéricos e imax entero.")
             return
 
-        solver = BisectionMethod(func_str, xl, xu, es=es, imax=imax)
+        solver = BisectionMethod(
+            func_str, xl, xu, es=es, imax=imax,
+            input_type=self.input_type)
         result = solver.solve()
 
         self.txt_result.configure(state="normal")
@@ -423,14 +443,17 @@ class BisectionMethodView(ctk.CTkFrame):
             self.lbl_info.configure(text="")
         else:
             sol = result["solution"]
-            out = f"f(x) = {sol.get('original_expr', '---')}\n"
+            original_name = (
+                "F(x)" if sol.get("original_is_antiderivative") else "f(x)"
+            )
+            out = f"{original_name} = {sol.get('original_expr', '---')}\n"
             out += f"f'(x) = {sol.get('derivative_expr', '---')}\n"
             out += f"f''(x) = {sol.get('second_derivative_expr', '---')}\n"
             out += f"\nPunto crítico x* ≈ {sol['root']:.8f}\n"
             out += f"Iteraciones = {sol['iterations']}\n"
             out += f"Error (ea) = {sol['error']:.6g}%\n"
             out += f"Convergió = {'Sí' if sol['converged'] else 'No (máx. iteraciones)'}\n"
-            out += f"f(x*) = {sol.get('original_value', float('nan')):.6g}\n"
+            out += f"{original_name}* = {sol.get('original_value', float('nan')):.6g}\n"
             out += f"f'(x*) = {sol['f_value']:.6g}\n"
             if sol.get("second_derivative") is not None:
                 out += f"f''(x*) = {sol['second_derivative']:.6g}\n"
@@ -443,7 +466,7 @@ class BisectionMethodView(ctk.CTkFrame):
             sep = "─" * 60
             steps_text = (
                 "PROCEDIMIENTO — BISECCIÓN SOBRE f'(x)\n"
-                f"f(x) = {sol.get('original_expr', '---')}\n"
+                f"{original_name} = {sol.get('original_expr', '---')}\n"
                 f"f'(x) = {sol.get('derivative_expr', '---')}\n"
                 "Objetivo: hallar x* donde f'(x*) = 0.\n\n"
                 "Fórmulas:\n"
@@ -458,7 +481,7 @@ class BisectionMethodView(ctk.CTkFrame):
             for step in result["steps"]:
                 if step["type"] == "initial":
                     steps_text += "DATOS INICIALES\n"
-                    steps_text += f"  f(x) = {sol.get('original_expr', '---')}\n"
+                    steps_text += f"  {original_name} = {sol.get('original_expr', '---')}\n"
                     steps_text += f"  f'(x) = {step['f_expr']}\n"
                     steps_text += f"  Intervalo = [{step['xl']:.8g}, {step['xu']:.8g}]\n"
                     steps_text += f"  f'(xl) = {step['f_xl']:.8g}\n"
@@ -488,7 +511,7 @@ class BisectionMethodView(ctk.CTkFrame):
                     steps_text += f"  x* ≈ {step['root']:.10g}\n"
                     steps_text += f"  Iteraciones = {step['iterations']}\n"
                     steps_text += f"  ea final = {step['error']:.8g}%\n"
-                    steps_text += f"  f(x*) = {sol.get('original_value', float('nan')):.8g}\n"
+                    steps_text += f"  {original_name}* = {sol.get('original_value', float('nan')):.8g}\n"
                     steps_text += f"  f'(x*) = {sol['f_value']:.8g}\n"
                     steps_text += f"  f''(x*) = {segunda}\n"
                     steps_text += f"  Clasificación: {sol.get('critical_type', 'inconcluso')}\n"
@@ -520,29 +543,31 @@ class BisectionMethodView(ctk.CTkFrame):
                 text=f"x* ≈ {sol['root']:.6g} ({sol.get('critical_type', 'inconcluso')}, iter={sol['iterations']}, ea={sol['error']:.4g}%)"
             )
 
-            self._plot(result["steps"], func_str, xl, xu)
+            self._plot(result["steps"], func_str, xl, xu, self.input_type)
 
         self.txt_result.configure(state="disabled")
         self.txt_steps.configure(state="disabled")
         self.txt_table.configure(state="disabled")
 
     # --- Gráfica ---
-    def _plot(self, steps, func_str, xl_orig, xu_orig):
-        self._plot_data = (steps, func_str, xl_orig, xu_orig)
+    def _plot(self, steps, func_str, xl_orig, xu_orig,
+              input_type="function"):
+        self._plot_data = (steps, func_str, xl_orig, xu_orig, input_type)
         self._render_plot()
 
     def _render_plot(self):
         if self._plot_data is None:
             return
-        steps, func_str, xl_orig, xu_orig = self._plot_data
+        steps, func_str, xl_orig, xu_orig, input_type = self._plot_data
         for w in self.graph_frame.winfo_children():
             w.destroy()
         if self.graph_mode == "3D":
-            self._render_plot_3d(steps, func_str, xl_orig, xu_orig)
+            self._render_plot_3d(steps, func_str, xl_orig, xu_orig, input_type)
         else:
-            self._render_plot_2d(steps, func_str, xl_orig, xu_orig)
+            self._render_plot_2d(steps, func_str, xl_orig, xu_orig, input_type)
 
-    def _render_plot_2d(self, steps, func_str, xl_orig, xu_orig):
+    def _render_plot_2d(self, steps, func_str, xl_orig, xu_orig,
+                        input_type="function"):
         fig, ax = plt.subplots(figsize=(5.5, 3.5))
         show_original = self.curve_mode in {"Ambas", "f(x)"}
         show_derivative = self.curve_mode in {"Ambas", "f'(x)"}
@@ -556,15 +581,19 @@ class BisectionMethodView(ctk.CTkFrame):
         a, b = xl_orig - margen, xu_orig + margen
         spec = None
         try:
-            spec = build_function_spec(func_str)
+            spec = build_function_spec(func_str, input_type=input_type)
         except Exception:
             pass
 
         if spec is not None:
+            original_label = (
+                "F(x) (C=0)" if spec["original_is_antiderivative"]
+                else "f(x)"
+            )
             if show_original:
                 xs, ys = evaluate_curve(spec["original"], a, b, 300)
                 ax.plot(xs, ys, color="#2ca02c", linewidth=1.8,
-                        label="f(x)")
+                        label=original_label)
             if show_derivative:
                 xs, ys = evaluate_curve(spec["derivative"], a, b, 300)
                 derivative_axis.plot(xs, ys, color="#58A1D3",
@@ -608,7 +637,12 @@ class BisectionMethodView(ctk.CTkFrame):
 
         ax.set_title("Bisección: f(x) y f'(x)")
         ax.set_xlabel("x")
-        ax.set_ylabel("f(x)" if show_original else "f'(x)")
+        if show_original:
+            ax.set_ylabel(
+                "F(x)" if spec is not None and spec["original_is_antiderivative"]
+                else "f(x)")
+        else:
+            ax.set_ylabel("f'(x)")
         if ax2 is not None:
             ax2.set_ylabel("f'(x)")
         ax.grid(True, linestyle=":", alpha=0.6)
@@ -623,7 +657,8 @@ class BisectionMethodView(ctk.CTkFrame):
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True)
 
-    def _render_plot_3d(self, steps, func_str, xl_orig, xu_orig):
+    def _render_plot_3d(self, steps, func_str, xl_orig, xu_orig,
+                        input_type="function"):
         fig = plt.figure(figsize=(5.5, 3.5))
         ax = fig.add_subplot(111, projection="3d")
         show_original = self.curve_mode in {"Ambas", "f(x)"}
@@ -638,7 +673,7 @@ class BisectionMethodView(ctk.CTkFrame):
         a, b = xl_orig - margen, xu_orig + margen
         spec = None
         try:
-            spec = build_function_spec(func_str)
+            spec = build_function_spec(func_str, input_type=input_type)
         except Exception:
             pass
 

@@ -96,9 +96,25 @@ class NewtonRootsView(ctk.CTkFrame):
             text_color=COLOR_LIGHT_CYAN
         )
         card_title.pack(anchor="w", padx=15, pady=(15, 10))
-        
+
+        ctk.CTkLabel(
+            self.input_card, text="Tipo de entrada:",
+            font=self.label_font, text_color=COLOR_TEXT
+        ).pack(anchor="w", padx=15, pady=(0, 2))
+        self.input_type_switch = ctk.CTkSegmentedButton(
+            self.input_card, values=["f(x)", "f'(x)"],
+            command=self._on_input_type,
+            font=self.label_font,
+            selected_color=COLOR_ACCENT, selected_hover_color=COLOR_ACCENT_HOVER,
+            unselected_color=COLOR_BG, unselected_hover_color=COLOR_BORDER,
+            text_color=COLOR_TEXT, corner_radius=8
+        )
+        self.input_type_switch.set("f(x)")
+        self.input_type_switch.pack(fill="x", padx=15, pady=(0, 8))
+        self.input_type = "function"
+
         fields = [
-            ("Función original f(x):", "entry_func", "x**3 - 3*x"),
+            ("Entrada (f(x) o f'(x)):", "entry_func", "x**3 - 3*x"),
             ("Aproximación Inicial (x0):", "entry_x0", "0.5"),
             ("Tolerancia (Tol):", "entry_tol", "1e-5"),
             ("Máx. Iteraciones:", "entry_max", "150"),
@@ -147,6 +163,9 @@ class NewtonRootsView(ctk.CTkFrame):
             command=self.solve_newton
         )
         self.btn_calc.pack(fill="x", padx=15, pady=20)
+
+    def _on_input_type(self, value):
+        self.input_type = "function" if value == "f(x)" else "derivative"
 
     def setup_outputs(self):
         self.txt_res = ctk.CTkTextbox(
@@ -291,13 +310,13 @@ class NewtonRootsView(ctk.CTkFrame):
         if self.graph_mode == "3D":
             text = (
                 "Eje x = x.  Eje y = separación de curvas.  Eje z = valor.\n"
-                "Superficie verde = f(x).  Superficie azul = f'(x).\n"
+                "Superficie verde = f(x) o F(x).  Superficie azul = f'(x).\n"
                 "Superficie gris = f'(x)=0.  Línea naranja = iterados.\n"
                 "Estrella verde = x* final sobre cada curva."
             )
         else:
             text = (
-                "Curva verde = f(x).  Curva azul = f'(x).  Línea punteada = f'(x)=0.\n"
+                "Curva verde = f(x) o F(x) (C=0).  Curva azul = f'(x).  Línea punteada = f'(x)=0.\n"
                 "En 'Ambas' se usa doble eje Y: izquierdo f(x), derecho f'(x).\n"
                 "Puntos naranjas = aproximaciones de cada iteración.\n"
                 "Estrella verde = x* final."
@@ -314,14 +333,15 @@ class NewtonRootsView(ctk.CTkFrame):
         self._update_graph_legend()
         self._render_graph()
 
-    def _plot_result(self, result, func_str, xmin, xmax):
-        self._plot_payload = (result, func_str, xmin, xmax)
+    def _plot_result(self, result, func_str, xmin, xmax,
+                     input_type="function"):
+        self._plot_payload = (result, func_str, xmin, xmax, input_type)
         self._render_graph()
 
     def _render_graph(self):
         if self._plot_payload is None:
             return
-        result, func_str, xmin, xmax = self._plot_payload
+        result, func_str, xmin, xmax, input_type = self._plot_payload
 
         self.fig.clear()
         if self.graph_mode == "3D":
@@ -331,12 +351,13 @@ class NewtonRootsView(ctk.CTkFrame):
         self.apply_graph_theme()
 
         if self.graph_mode == "3D":
-            self._render_graph_3d(result, func_str, xmin, xmax)
+            self._render_graph_3d(result, func_str, xmin, xmax, input_type)
         else:
-            self._render_graph_2d(result, func_str, xmin, xmax)
+            self._render_graph_2d(result, func_str, xmin, xmax, input_type)
         self.canvas.draw()
 
-    def _render_graph_2d(self, result, func_str, xmin, xmax):
+    def _render_graph_2d(self, result, func_str, xmin, xmax,
+                         input_type="function"):
         try:
             self.ax.clear()
             self.apply_graph_theme()
@@ -345,11 +366,16 @@ class NewtonRootsView(ctk.CTkFrame):
             both = show_original and show_derivative
             ax2 = self.ax.twinx() if both else None
             derivative_axis = ax2 if ax2 is not None else self.ax
-            spec = build_function_spec(func_str)
+            spec = build_function_spec(func_str, input_type=input_type)
+            original_label = (
+                "F(x) (C=0)" if spec["original_is_antiderivative"]
+                else "f(x)"
+            )
 
             if show_original:
                 xs, ys = evaluate_curve(spec["original"], xmin, xmax, 500)
-                self.ax.plot(xs, ys, color="#2ca02c", lw=2, label="f(x)")
+                self.ax.plot(
+                    xs, ys, color="#2ca02c", lw=2, label=original_label)
             if show_derivative:
                 xs, ys = evaluate_curve(spec["derivative"], xmin, xmax, 500)
                 derivative_axis.plot(
@@ -412,7 +438,12 @@ class NewtonRootsView(ctk.CTkFrame):
                 "Newton: f(x) y f'(x)",
                 fontdict={"size": 11, "weight": "bold"})
             self.ax.set_xlabel("x")
-            self.ax.set_ylabel("f(x)" if show_original else "f'(x)")
+            if show_original:
+                self.ax.set_ylabel(
+                    "F(x)" if spec["original_is_antiderivative"]
+                    else "f(x)")
+            else:
+                self.ax.set_ylabel("f'(x)")
             if ax2 is not None:
                 ax2.set_ylabel("f'(x)")
 
@@ -423,7 +454,8 @@ class NewtonRootsView(ctk.CTkFrame):
                          ha="center", va="center", transform=self.ax.transAxes,
                          color=txt_color, weight="bold")
 
-    def _render_graph_3d(self, result, func_str, xmin, xmax):
+    def _render_graph_3d(self, result, func_str, xmin, xmax,
+                         input_type="function"):
         try:
             self.ax.clear()
             self.apply_graph_theme()
@@ -434,7 +466,7 @@ class NewtonRootsView(ctk.CTkFrame):
             derivative_band = [0.3, 0.9] if both else [-1.0, 1.0]
             original_y = -0.6 if both else 0.0
             derivative_y = 0.6 if both else 0.0
-            spec = build_function_spec(func_str)
+            spec = build_function_spec(func_str, input_type=input_type)
 
             if show_original:
                 xs, ys = evaluate_curve(spec["original"], xmin, xmax, 240)
@@ -554,7 +586,8 @@ class NewtonRootsView(ctk.CTkFrame):
             self.txt_table.configure(state="disabled")
             return
 
-        solver = NewtonRoots(func_str, x0, tol, max_i)
+        solver = NewtonRoots(
+            func_str, x0, tol, max_i, input_type=self.input_type)
         result = solver.solve()
 
         self.txt_res.configure(state="normal")
@@ -599,12 +632,15 @@ class NewtonRootsView(ctk.CTkFrame):
             return
             
         # Flujo exitoso normal
+        original_name = (
+            "F(x)" if result.get("original_is_antiderivative") else "f(x)"
+        )
         resumen = f"📊 Resumen de Ejecución:\n\n{result['message']}\n\n"
-        resumen += f"f(x) = {result.get('original_expr', '---')}\n"
+        resumen += f"{original_name} = {result.get('original_expr', '---')}\n"
         resumen += f"f'(x) = {result.get('derivative_expr', '---')}\n"
         resumen += f"f''(x) = {result.get('second_derivative_expr', '---')}\n"
         resumen += f"Punto crítico x* ≈ {result['solution']:.8f}\n"
-        resumen += f"f(x*) = {result.get('original_value', float('nan')):.6g}\n"
+        resumen += f"{original_name}* = {result.get('original_value', float('nan')):.6g}\n"
         resumen += f"f'(x*) = {result.get('derivative_value', float('nan')):.6g}\n"
         if result.get("second_derivative") is not None:
             resumen += f"f''(x*) = {result['second_derivative']:.6g}\n"
@@ -615,7 +651,8 @@ class NewtonRootsView(ctk.CTkFrame):
 
         try:
             x_sym = sp.Symbol('x')
-            spec_steps = build_function_spec(func_str)
+            spec_steps = build_function_spec(
+                func_str, input_type=self.input_type)
             df_num_steps = sp.lambdify(
                 x_sym, spec_steps["second_derivative"], 'numpy')
         except Exception:
@@ -625,7 +662,7 @@ class NewtonRootsView(ctk.CTkFrame):
         sep = "─" * 60
         steps_text = (
             "PROCEDIMIENTO — NEWTON SOBRE f'(x)\n"
-            f"f(x) = {result.get('original_expr', '---')}\n"
+            f"{original_name} = {result.get('original_expr', '---')}\n"
             f"f'(x) = {result.get('derivative_expr', '---')}\n"
             f"f''(x) = {result.get('second_derivative_expr', '---')}\n"
             "Objetivo: resolver f'(x) = 0.\n\n"
@@ -673,7 +710,7 @@ class NewtonRootsView(ctk.CTkFrame):
         steps_text += "═" * 60 + "\n"
         steps_text += "RESULTADO FINAL\n"
         steps_text += f"  x* ≈ {final['x']:.10g}\n"
-        steps_text += f"  f(x*) = {result.get('original_value', float('nan')):.8g}\n"
+        steps_text += f"  {original_name}* = {result.get('original_value', float('nan')):.8g}\n"
         steps_text += f"  f'(x*) = {final['fx']:.8g}\n"
         steps_text += f"  f''(x*) = {segunda_final_txt}\n"
         steps_text += f"  Clasificación: {result.get('critical_type', 'inconcluso')}\n"
@@ -711,4 +748,4 @@ class NewtonRootsView(ctk.CTkFrame):
         self.txt_steps.configure(state="disabled")
         self.txt_table.configure(state="disabled")
 
-        self._plot_result(result, func_str, xmin, xmax)
+        self._plot_result(result, func_str, xmin, xmax, self.input_type)

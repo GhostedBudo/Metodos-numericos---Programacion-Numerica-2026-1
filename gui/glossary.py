@@ -2,9 +2,13 @@
 
 GLOSSARY_TEXT = """GLOSARIO — OPTIMIZACIÓN CON f(x) Y f'(x)
 
-FUNCIÓN DE ENTRADA
-  f(x) = función original que escribe el usuario.
-         El sistema calcula automáticamente f'(x) y f''(x).
+TIPOS DE ENTRADA
+  El selector permite escribir uno de los dos:
+
+  f(x)   = función original. El sistema calcula f'(x) y f''(x).
+  f'(x)  = primera derivada. El sistema calcula f''(x) e integra
+           F(x) con C=0 para poder mostrarla en la gráfica.
+           F(x) es una antiderivada, no la f(x) exacta.
 
 SÍMBOLOS
   xl   = límite inferior del intervalo. Punto izquierdo.
