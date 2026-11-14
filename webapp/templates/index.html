@@ -128,12 +128,18 @@
             <button type="button" id="btnOriginal">f(x)</button>
             <button type="button" id="btnDerivative">f'(x)</button>
           </div>
-          <span class="hint">Ambas usa doble eje Y. La vista 3D separa f(x) y f'(x) en dos superficies.</span>
+          <div class="segmented" role="group" aria-label="Paso a paso de la construcción">
+            <button type="button" id="btnStepPrev" disabled>◀</button>
+            <button type="button" id="btnStepNext" disabled>▶</button>
+            <button type="button" id="btnStepAll" disabled>Todo</button>
+          </div>
+          <span class="hint" id="stepLabel">Paso 0 / 0</span>
+          <span class="hint">Ambas usa doble eje Y. La vista 3D separa f(x) y f'(x) en dos superficies. ◀ ▶ recorren la construcción paso a paso.</span>
         </div>
         <div id="plot" class="plot"></div>
         <p class="legend" id="graphLegend">
           Eje x = valores de x. Curva verde = f(x) o F(x). Curva azul = f'(x). Línea punteada = f'(x)=0.
-          Puntos naranjas = iteraciones. Estrella verde = x*.
+          Puntos naranjas = iteraciones. Línea roja = recta del paso actual. Rectángulo naranja = intervalo del paso. Estrella verde = x*.
         </p>
       </div>
 
@@ -165,6 +171,7 @@
             <li>Curva azul: f'(x), calculada automáticamente.</li>
             <li>Línea punteada: f'(x) = 0, donde buscamos el punto crítico.</li>
             <li>Puntos naranjas: aproximaciones de cada iteración.</li>
+            <li>Línea roja: recta del paso actual. En Newton es la tangente a f'(x) en x_i; en Secante une los dos últimos puntos; en Bisección el rectángulo naranja muestra el intervalo [xl, xu] vigente. Usa ◀ ▶ para recorrer la construcción.</li>
             <li>Estrella verde: x* final sobre la curva seleccionada.</li>
             <li>Zona sombreada: intervalo inicial [xl, xu] en Bisección.</li>
             <li>Selector Ambas / f(x) / f'(x): elige qué curvas mostrar.</li>

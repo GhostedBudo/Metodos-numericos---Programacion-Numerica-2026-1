@@ -14,7 +14,12 @@ if str(ROOT) not in sys.path:
 
 from lib.bisection_method import BisectionMethod
 from lib.newton_raphson import NewtonRoots
-from lib.optimization_utils import build_function_spec, evaluate_curve
+from lib.optimization_utils import (
+    build_function_spec,
+    clipped_segment,
+    evaluate_curve,
+    visible_y_range,
+)
 from lib.secante import SecantRoots
 
 app = Flask(
@@ -388,6 +393,7 @@ def solve():
                 "y": _safe_float(step["f_xr"]),
                 "original_y": original_fn(step["xr"]),
                 "iter": step["iter"],
+                "bracket": [_safe_float(step["xl"]), _safe_float(step["xu"])],
             }
             for step in result["steps"]
             if step.get("type") == "iteration"
@@ -445,6 +451,28 @@ def solve():
     derivative_value = derivative_fn(final_x)
     original_curve = _curve_data(spec["original"], domain[0], domain[1])
     derivative_curve = _curve_data(spec["derivative"], domain[0], domain[1])
+
+    if method == "newton":
+        deriv_range = visible_y_range(derivative_curve["y"])
+        x_half = 0.35 * (domain[1] - domain[0])
+        for point in iter_points:
+            point["segment"] = clipped_segment(
+                point["x"], point["y"], second_fn(point["x"]),
+                x_half, deriv_range)
+    elif method == "secant":
+        deriv_range = visible_y_range(derivative_curve["y"])
+        x_half = 0.35 * (domain[1] - domain[0])
+        for index, point in enumerate(iter_points):
+            segment = None
+            if index > 0:
+                previous = iter_points[index - 1]
+                slope = None
+                if point["x"] != previous["x"]:
+                    slope = (point["y"] - previous["y"]) / (
+                        point["x"] - previous["x"])
+                segment = clipped_segment(
+                    previous["x"], previous["y"], slope, x_half, deriv_range)
+            point["segment"] = segment
     original_prefix = "F(x)" if spec["original_is_antiderivative"] else "f(x)"
     original_label = (
         f"{original_prefix} = {spec['original_str']}"

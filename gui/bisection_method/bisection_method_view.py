@@ -316,6 +316,37 @@ class BisectionMethodView(ctk.CTkFrame):
         self.graph_mode = "2D"
         self.curve_mode = "Ambas"
         self._plot_data = None
+        self.step_index = 0
+
+        ctk.CTkLabel(
+            controls, text="Paso:", font=self.label_font, text_color=COLOR_MUTED
+        ).pack(side="left", padx=(16, 8))
+        step_button_style = {
+            "font": self.label_font,
+            "fg_color": COLOR_BG,
+            "hover_color": COLOR_BORDER,
+            "border_color": COLOR_INTERACTIVE_BORDER,
+            "border_width": 1,
+            "text_color": COLOR_TEXT,
+            "corner_radius": 8,
+        }
+        self.btn_step_prev = ctk.CTkButton(
+            controls, text="◀", width=34,
+            command=lambda: self._change_step(-1), **step_button_style)
+        self.btn_step_prev.pack(side="left")
+        self.btn_step_next = ctk.CTkButton(
+            controls, text="▶", width=34,
+            command=lambda: self._change_step(1), **step_button_style)
+        self.btn_step_next.pack(side="left", padx=(4, 4))
+        self.btn_step_all = ctk.CTkButton(
+            controls, text="Todo", width=52,
+            command=self._step_all, **step_button_style)
+        self.btn_step_all.pack(side="left")
+        self.lbl_step = ctk.CTkLabel(
+            controls, text="Paso 0 / 0", font=self.label_font,
+            text_color=COLOR_MUTED)
+        self.lbl_step.pack(side="left", padx=(8, 0))
+        self._update_step_controls()
 
         self.graph_frame = ctk.CTkFrame(self.tab_graph, fg_color="transparent")
         self.graph_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
@@ -339,10 +370,39 @@ class BisectionMethodView(ctk.CTkFrame):
             text = (
                 "Curva verde = f(x) o F(x) (C=0).  Curva azul = f'(x).  Línea negra = f'(x)=0.\n"
                 "En 'Ambas' se usa doble eje Y: izquierdo f(x), derecho f'(x).\n"
-                "Puntos naranjas = iteraciones.  Estrella verde = x* final.\n"
-                "Zona azul sombreada = intervalo inicial [xl, xu]."
+                "Puntos naranjas = iteraciones (◀ ▶ recorren la construcción paso a paso).\n"
+                "Rectángulo naranja = intervalo [xl, xu] del paso actual.\n"
+                "Zona azul sombreada = intervalo inicial [xl, xu].\n"
+                "Estrella verde = x* final (aparece al llegar al último paso)."
             )
         self.graph_legend.configure(text=text)
+
+    def _iteration_steps(self):
+        if self._plot_data is None:
+            return []
+        return [s for s in self._plot_data[0] if s["type"] == "iteration"]
+
+    def _update_step_controls(self):
+        total = len(self._iteration_steps())
+        self.lbl_step.configure(text=f"Paso {self.step_index} / {total}")
+        sin_datos = self._plot_data is None
+        self.btn_step_prev.configure(
+            state="disabled" if (sin_datos or self.step_index <= 0) else "normal")
+        self.btn_step_next.configure(
+            state="disabled" if (sin_datos or self.step_index >= total) else "normal")
+        self.btn_step_all.configure(
+            state="disabled" if (sin_datos or self.step_index >= total) else "normal")
+
+    def _change_step(self, delta):
+        total = len(self._iteration_steps())
+        self.step_index = max(0, min(total, self.step_index + delta))
+        self._update_step_controls()
+        self._render_plot()
+
+    def _step_all(self):
+        self.step_index = len(self._iteration_steps())
+        self._update_step_controls()
+        self._render_plot()
 
     def _on_graph_mode(self, value):
         self.graph_mode = value
@@ -553,6 +613,8 @@ class BisectionMethodView(ctk.CTkFrame):
     def _plot(self, steps, func_str, xl_orig, xu_orig,
               input_type="function"):
         self._plot_data = (steps, func_str, xl_orig, xu_orig, input_type)
+        self.step_index = len(self._iteration_steps())
+        self._update_step_controls()
         self._render_plot()
 
     def _render_plot(self):
@@ -600,11 +662,22 @@ class BisectionMethodView(ctk.CTkFrame):
                                      linewidth=1.8, label="f'(x)")
                 derivative_axis.axhline(0, color="k", linewidth=0.8)
 
-        x_iters = [s["xr"] for s in steps if s["type"] == "iteration"]
+        all_iter_steps = [s for s in steps if s["type"] == "iteration"]
+        iter_steps = all_iter_steps[:self.step_index]
+        current_step = iter_steps[-1] if iter_steps else None
+
+        if current_step is not None:
+            ax.axvspan(
+                current_step["xl"], current_step["xu"], alpha=0.18,
+                color="#ff9f43", label="Intervalo del paso", zorder=1)
+            for limite in (current_step["xl"], current_step["xu"]):
+                derivative_axis.axvline(
+                    limite, color="#ff9f43", linestyle="--", linewidth=1)
+
+        x_iters = [s["xr"] for s in iter_steps]
         if x_iters:
             if show_derivative:
-                y_iters = [s["f_xr"] for s in steps
-                           if s["type"] == "iteration"]
+                y_iters = [s["f_xr"] for s in iter_steps]
                 derivative_axis.scatter(
                     x_iters, y_iters, color="#ff7f0e", marker="o",
                     s=35, label="Iterados", zorder=3)
@@ -624,7 +697,7 @@ class BisectionMethodView(ctk.CTkFrame):
         except Exception:
             root_val = xl_orig
 
-        if spec is not None:
+        if self.step_index >= len(all_iter_steps) and spec is not None:
             if show_original:
                 f_root = evaluate_expression(spec["original"], root_val)
                 ax.scatter(root_val, f_root, color="#2ca02c", marker="*",

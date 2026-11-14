@@ -47,6 +47,12 @@ CÓMO LEER LA GRÁFICA
       eje izquierdo = f(x), eje derecho = f'(x).
   Línea negra o punteada = f'(x) = 0, donde buscamos el corte.
   Puntos naranjas = aproximaciones de cada iteración.
+  Línea roja = recta del paso actual. En Newton es la tangente a
+              f'(x) en x_i; en Secante une los dos últimos puntos;
+              en Bisección el rectángulo naranja marca el intervalo
+              [xl, xu] vigente.
+  Controles ◀ ▶ Todo = recorren la construcción de la gráfica paso
+              a paso (2D). Todo vuelve a mostrar la gráfica completa.
   Estrella verde = x* final sobre la curva seleccionada.
   Zona sombreada = intervalo inicial [xl, xu] (solo Bisección).
   Vista 3D = dos superficies separadas: verde para f(x) y azul

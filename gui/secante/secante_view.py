@@ -12,7 +12,8 @@ from gui.theme import (
 )
 from lib.secante import SecantRoots
 from lib.optimization_utils import (
-    build_function_spec, evaluate_curve, evaluate_expression,
+    build_function_spec, clipped_segment, evaluate_curve, evaluate_expression,
+    visible_y_range,
 )
 
 class SecantRootsView(ctk.CTkFrame):
@@ -264,6 +265,37 @@ class SecantRootsView(ctk.CTkFrame):
         self.curve_mode_switch.set("Ambas")
         self.curve_mode_switch.pack(side="left")
         self.curve_mode = "Ambas"
+        self.step_index = 0
+
+        ctk.CTkLabel(
+            controls, text="Paso:", font=self.label_font, text_color=COLOR_MUTED
+        ).pack(side="left", padx=(16, 8))
+        step_button_style = {
+            "font": self.label_font,
+            "fg_color": COLOR_BG,
+            "hover_color": COLOR_BORDER,
+            "border_color": COLOR_INTERACTIVE_BORDER,
+            "border_width": 1,
+            "text_color": COLOR_TEXT,
+            "corner_radius": 8,
+        }
+        self.btn_step_prev = ctk.CTkButton(
+            controls, text="◀", width=34,
+            command=lambda: self._change_step(-1), **step_button_style)
+        self.btn_step_prev.pack(side="left")
+        self.btn_step_next = ctk.CTkButton(
+            controls, text="▶", width=34,
+            command=lambda: self._change_step(1), **step_button_style)
+        self.btn_step_next.pack(side="left", padx=(4, 4))
+        self.btn_step_all = ctk.CTkButton(
+            controls, text="Todo", width=52,
+            command=self._step_all, **step_button_style)
+        self.btn_step_all.pack(side="left")
+        self.lbl_step = ctk.CTkLabel(
+            controls, text="Paso 0 / 0", font=self.label_font,
+            text_color=COLOR_MUTED)
+        self.lbl_step.pack(side="left", padx=(8, 0))
+        self._update_step_controls()
 
         self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.tab_graph)
@@ -321,10 +353,35 @@ class SecantRootsView(ctk.CTkFrame):
             text = (
                 "Curva verde = f(x) o F(x) (C=0).  Curva azul = f'(x).  Línea punteada = f'(x)=0.\n"
                 "En 'Ambas' se usa doble eje Y: izquierdo f(x), derecho f'(x).\n"
-                "Puntos naranjas = aproximaciones de cada iteración.\n"
-                "Estrella verde = x* final."
+                "Puntos naranjas = aproximaciones de cada iteración "
+                "(◀ ▶ recorren la construcción paso a paso).\n"
+                "Línea roja = secante que une los dos últimos puntos del paso actual.\n"
+                "Estrella verde = x* final (aparece al llegar al último paso)."
             )
         self.graph_legend.configure(text=text)
+
+    def _update_step_controls(self):
+        total = len(self._plot_payload[0]["steps"]) if self._plot_payload else 0
+        self.lbl_step.configure(text=f"Paso {self.step_index} / {total}")
+        sin_datos = self._plot_payload is None
+        self.btn_step_prev.configure(
+            state="disabled" if (sin_datos or self.step_index <= 0) else "normal")
+        self.btn_step_next.configure(
+            state="disabled" if (sin_datos or self.step_index >= total) else "normal")
+        self.btn_step_all.configure(
+            state="disabled" if (sin_datos or self.step_index >= total) else "normal")
+
+    def _change_step(self, delta):
+        total = len(self._plot_payload[0]["steps"]) if self._plot_payload else 0
+        self.step_index = max(0, min(total, self.step_index + delta))
+        self._update_step_controls()
+        self._render_graph()
+
+    def _step_all(self):
+        total = len(self._plot_payload[0]["steps"]) if self._plot_payload else 0
+        self.step_index = total
+        self._update_step_controls()
+        self._render_graph()
 
     def _on_graph_mode(self, value):
         self.graph_mode = value
@@ -339,6 +396,8 @@ class SecantRootsView(ctk.CTkFrame):
     def _plot_result(self, result, func_str, xmin, xmax,
                      input_type="function"):
         self._plot_payload = (result, func_str, xmin, xmax, input_type)
+        self.step_index = len(result["steps"])
+        self._update_step_controls()
         self._render_graph()
 
     def _render_graph(self):
@@ -390,10 +449,13 @@ class SecantRootsView(ctk.CTkFrame):
                     linestyle="--", linewidth=1)
 
             steps_data = result["steps"]
-            if len(steps_data) > 1:
-                x_iters = [s["x"] for s in steps_data[:-1]]
+            full = self.step_index >= len(steps_data)
+            shown = steps_data[:self.step_index]
+            shown_points = shown[:-1] if full else shown
+            if shown_points:
+                x_iters = [s["x"] for s in shown_points]
                 if show_derivative:
-                    y_iters = [s["fx"] for s in steps_data[:-1]]
+                    y_iters = [s["fx"] for s in shown_points]
                     derivative_axis.scatter(
                         x_iters, y_iters, color="#ff7f0e", marker="o",
                         s=35, label="Iterados", zorder=3)
@@ -407,21 +469,37 @@ class SecantRootsView(ctk.CTkFrame):
                         x_iters, y_iters, color="#ff7f0e", marker="o",
                         s=35, label="Iterados", zorder=3)
 
+            if show_derivative and len(shown) >= 2:
+                previo, punto = shown[-2], shown[-1]
+                slope = None
+                if punto["x"] != previo["x"]:
+                    slope = (punto["fx"] - previo["fx"]) / (
+                        punto["x"] - previo["x"])
+                segment = clipped_segment(
+                    previo["x"], previo["fx"], slope,
+                    0.35 * (xmax - xmin), visible_y_range(ys))
+                if segment is not None:
+                    derivative_axis.plot(
+                        [segment[0], segment[2]], [segment[1], segment[3]],
+                        color="#e74c3c", linewidth=2,
+                        label="Secante del paso", zorder=4)
+
             final_root = steps_data[-1]["x"]
-            if show_original:
-                final_original = evaluate_expression(
-                    spec["original"], final_root)
-                self.ax.scatter(
-                    final_root, final_original, color="#2ca02c",
-                    marker="*", s=150, label=f"x* ({final_root:.4f})",
-                    zorder=4)
-            if show_derivative:
-                final_derivative = evaluate_expression(
-                    spec["derivative"], final_root)
-                derivative_axis.scatter(
-                    final_root, final_derivative, color="#2ca02c",
-                    marker="*", s=150, label=f"x* ({final_root:.4f})",
-                    zorder=4)
+            if full:
+                if show_original:
+                    final_original = evaluate_expression(
+                        spec["original"], final_root)
+                    self.ax.scatter(
+                        final_root, final_original, color="#2ca02c",
+                        marker="*", s=150, label=f"x* ({final_root:.4f})",
+                        zorder=4)
+                if show_derivative:
+                    final_derivative = evaluate_expression(
+                        spec["derivative"], final_root)
+                    derivative_axis.scatter(
+                        final_root, final_derivative, color="#2ca02c",
+                        marker="*", s=150, label=f"x* ({final_root:.4f})",
+                        zorder=4)
 
             is_dark = (ctk.get_appearance_mode() == "Dark")
             handles, labels = self.ax.get_legend_handles_labels()

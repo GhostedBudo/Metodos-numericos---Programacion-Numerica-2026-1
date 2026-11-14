@@ -6,6 +6,7 @@ const state = {
   inputType: "function",
   activeTab: "summary",
   loading: false,
+  stepIndex: 0,
 };
 
 const methodMeta = {
@@ -103,6 +104,32 @@ function setInputType(type) {
     : "Escribes f'(x). El sistema calcula f''(x) e integra F(x) con C=0.";
 }
 
+function stepTotal() {
+  return state.data ? state.data.graph.iterations.length : 0;
+}
+
+function updateStepControls() {
+  const total = stepTotal();
+  $("#stepLabel").textContent = `Paso ${state.stepIndex} / ${total}`;
+  $("#btnStepPrev").disabled = !state.data || state.stepIndex <= 0;
+  $("#btnStepNext").disabled = !state.data || state.stepIndex >= total;
+  $("#btnStepAll").disabled = !state.data || state.stepIndex >= total;
+}
+
+function setStep(delta) {
+  if (!state.data) return;
+  state.stepIndex = Math.max(0, Math.min(stepTotal(), state.stepIndex + delta));
+  updateStepControls();
+  renderGraph();
+}
+
+function setStepAll() {
+  if (!state.data) return;
+  state.stepIndex = stepTotal();
+  updateStepControls();
+  renderGraph();
+}
+
 function showError(message) {
   const box = $("#errorBox");
   box.textContent = message;
@@ -128,6 +155,7 @@ function resetOutputs() {
     Plotly.purge(plot);
   }
   plot.innerHTML = "";
+  updateStepControls();
 }
 
 function readPayload() {
@@ -193,6 +221,8 @@ async function calculate() {
     state.graphMode = "2d";
     $("#btn2d").classList.add("active");
     $("#btn3d").classList.remove("active");
+    state.stepIndex = data.graph.iterations.length;
+    updateStepControls();
 
     renderSummary(data);
     renderSteps(data);
@@ -393,6 +423,8 @@ function plot2D(data) {
   const both = showOriginal && showDerivative;
   const originalCurve = curveData(graph, "original");
   const derivativeCurve = curveData(graph, "derivative");
+  const shown = graph.iterations.slice(0, state.stepIndex);
+  const current = shown.length ? shown[shown.length - 1] : null;
   const traces = [];
 
   if (showOriginal) {
@@ -427,11 +459,11 @@ function plot2D(data) {
     });
   }
 
-  if (graph.iterations.length) {
+  if (shown.length) {
     const useOriginal = mode === "original";
     traces.push({
-      x: graph.iterations.map((point) => point.x),
-      y: graph.iterations.map((point) => (
+      x: shown.map((point) => point.x),
+      y: shown.map((point) => (
         useOriginal ? point.original_y : point.y
       )),
       mode: "lines+markers",
@@ -443,8 +475,8 @@ function plot2D(data) {
 
     if (both) {
       traces.push({
-        x: graph.iterations.map((point) => point.x),
-        y: graph.iterations.map((point) => point.original_y),
+        x: shown.map((point) => point.x),
+        y: shown.map((point) => point.original_y),
         mode: "markers",
         name: "Iteraciones sobre f(x)",
         yaxis: "y",
@@ -455,7 +487,21 @@ function plot2D(data) {
     }
   }
 
-  if (graph.final && graph.final.x !== null) {
+  if (current && current.segment && showDerivative) {
+    traces.push({
+      x: [current.segment[0], current.segment[2]],
+      y: [current.segment[1], current.segment[3]],
+      mode: "lines",
+      name: "Recta del paso actual",
+      yaxis: both ? "y2" : "y",
+      line: { color: "#e74c3c", width: 2.4 },
+      hoverinfo: "skip",
+      showlegend: false,
+    });
+  }
+
+  if (graph.final && graph.final.x !== null
+      && state.stepIndex >= graph.iterations.length) {
     if (showOriginal) {
       traces.push({
         x: [graph.final.x],
@@ -478,7 +524,23 @@ function plot2D(data) {
     }
   }
 
-  Plotly.react($("#plot"), traces, base2DLayout(data, mode), {
+  const layout = base2DLayout(data, mode);
+  if (current && current.bracket) {
+    layout.shapes.push({
+      type: "rect",
+      xref: "x",
+      yref: "paper",
+      x0: current.bracket[0],
+      x1: current.bracket[1],
+      y0: 0,
+      y1: 1,
+      fillcolor: "rgba(255, 159, 67, 0.16)",
+      line: { color: "#ff9f43", width: 1.2 },
+      layer: "below",
+    });
+  }
+
+  Plotly.react($("#plot"), traces, layout, {
     responsive: true,
     displaylogo: false,
     scrollZoom: false,
@@ -660,6 +722,8 @@ function renderGraph() {
     legend.textContent = `${modeLabel}. Eje x = valores de x. `
       + "En Ambas, eje izquierdo = f(x) o F(x) (verde) y eje derecho = f'(x) (azul). "
       + "Línea punteada = f'(x)=0. Puntos naranjas = iteraciones. "
+      + "Línea roja = recta del paso actual (tangente en Newton, secante en Secante). "
+      + "Rectángulo naranja = intervalo [xl, xu] del paso actual en Bisección. "
       + "Estrella verde = x*. Zona sombreada = intervalo inicial [xl, xu].";
     plot2D(state.data);
   }
@@ -681,6 +745,9 @@ $("#btnOriginal").addEventListener("click", () => setCurveMode("original"));
 $("#btnDerivative").addEventListener("click", () => setCurveMode("derivative"));
 $("#btnInputFunction").addEventListener("click", () => setInputType("function"));
 $("#btnInputDerivative").addEventListener("click", () => setInputType("derivative"));
+$("#btnStepPrev").addEventListener("click", () => setStep(-1));
+$("#btnStepNext").addEventListener("click", () => setStep(1));
+$("#btnStepAll").addEventListener("click", setStepAll);
 
 window.addEventListener("resize", () => {
   if (state.data && state.activeTab === "graph" && window.Plotly) {
