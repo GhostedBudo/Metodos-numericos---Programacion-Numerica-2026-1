@@ -194,6 +194,66 @@ def classify_critical_point(deriv_expr, x_value, tol=1e-8, second_expr=None):
     }
 
 
+def visible_y_range(values, margin_ratio=0.08):
+    """Rango y visible a partir de una lista de valores (ignora None/NaN/inf).
+
+    Devuelve (lo, hi) con un margen relativo, o None si no hay datos útiles.
+    Se usa para recortar las rectas auxiliares (tangente/secante) al área
+    visible de la gráfica.
+    """
+    ys = []
+    for value in values:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            ys.append(number)
+    if len(ys) < 2:
+        return None
+    lo, hi = min(ys), max(ys)
+    margin = (hi - lo) * margin_ratio
+    if margin <= 0:
+        margin = max(abs(lo), abs(hi), 1.0) * 0.1
+    return lo - margin, hi + margin
+
+
+def clipped_segment(anchor_x, anchor_y, slope, x_half, y_range):
+    """Segmento de la recta y = anchor_y + slope*(x - anchor_x).
+
+    Se extiende ±x_half alrededor de anchor_x y se recorta a y_range para
+    que no dispare la escala del eje y. Devuelve [x0, y0, x1, y1] o None.
+    """
+    try:
+        anchor_x = float(anchor_x)
+        anchor_y = float(anchor_y)
+        slope = float(slope)
+        x_half = float(x_half)
+    except (TypeError, ValueError):
+        return None
+    if y_range is None or x_half <= 0:
+        return None
+    if not all(math.isfinite(v) for v in (anchor_x, anchor_y, slope)):
+        return None
+    x0, x1 = anchor_x - x_half, anchor_x + x_half
+    y0, y1 = anchor_y - slope * x_half, anchor_y + slope * x_half
+    dy = y1 - y0
+    lo, hi = y_range
+    t0, t1 = 0.0, 1.0
+    if abs(dy) > 1e-12:
+        ta, tb = (lo - y0) / dy, (hi - y0) / dy
+        t_in, t_out = (ta, tb) if ta < tb else (tb, ta)
+        t0, t1 = max(t0, t_in), min(t1, t_out)
+    elif not (lo <= y0 <= hi):
+        return None
+    if t0 >= t1:
+        return None
+    return [
+        x0 + t0 * (x1 - x0), y0 + t0 * dy,
+        x0 + t1 * (x1 - x0), y0 + t1 * dy,
+    ]
+
+
 def reconstruct_function(deriv_expr):
     """Reconstruye f(x) integrando f'(x), tomando la constante de integración 0.
 
