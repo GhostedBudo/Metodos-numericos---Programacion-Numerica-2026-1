@@ -3,7 +3,11 @@
 from lib.secante import SecantRoots
 
 
-def run_case(func_str, x0, x1, label):
+def aproxima(a, b, tol=1e-5):
+    return abs(a - b) < tol
+
+
+def run_case(func_str, x0, x1, label, root_esperada):
     print("=" * 70)
     print(f"Prueba Secante: {label}")
     print(f"f(x) = {func_str}")
@@ -18,22 +22,55 @@ def run_case(func_str, x0, x1, label):
 
     print(f"Resultado: {result['solution']:.10f}")
     print(f"Mensaje: {result['message']}")
+    assert aproxima(result["solution"], root_esperada), (
+        f"{label}: esperado ≈ {root_esperada}, got {result['solution']}"
+    )
+    assert result["original_expr"], "Falta original_expr"
+    assert result["derivative_expr"], "Falta derivative_expr"
+    assert result["second_derivative_expr"], "Falta second_derivative_expr"
+    assert result["derivative_value"] is not None
+    assert result["original_value"] is not None
+    assert result["critical_type"] in {"mínimo", "máximo", "inconcluso"}
     return result
 
 
 def test_secant():
     cases = [
-        ("e^(x)+2^(-x)+2*cos(x)-6", 1.0, 2.0, "Ejercicio 1"),
-        ("ln(x-1)+cos(x-1)", 1.3, 2.0, "Ejercicio 2"),
-        ("2*x*cos(2*x)-cos(x-1)^2", 2.0, 3.0, "Ejercicio 3 (intervalo [2,3])"),
-        ("(x-2)^2-ln(x)", 1.0, 2.0, "Ejercicio 4 (intervalo [1,2])"),
+        ("x**2 - 4*x + 1", 0.5, 1.5, "Cuadrática", 2.0),
+        ("x**3 - 3*x", 0.5, 1.5, "Cúbica", 1.0),
+        ("sin(x) + 0.5*x", 1.5, 2.5, "Trigonométrica", 2.0943951023931953),
+        ("(x - 2)**2 - ln(x)", 1.5, 3.0, "Con logaritmo", 2.224744871391589),
     ]
 
-    for func_str, x0, x1, label in cases:
-        run_case(func_str, x0, x1, label)
+    for func_str, x0, x1, label, root_esperada in cases:
+        run_case(func_str, x0, x1, label, root_esperada)
 
     print("\nTodas las pruebas de Secante completaron correctamente.")
 
 
+def test_error_sintaxis():
+    result = SecantRoots("2*x +", 1.0, 2.0).solve()
+    assert result["success"] is False
+    assert "sintaxis" in result["error_message"].lower() or "parse" in result["error_message"].lower()
+    print("OK test_error_sintaxis")
+
+
+def test_error_puntos_iguales():
+    result = SecantRoots("x**2 - 4*x + 1", 1.0, 1.0).solve()
+    assert result["success"] is False
+    assert "división por cero" in result["error_message"].lower()
+    print("OK test_error_puntos_iguales")
+
+
+def test_error_funcion_vacia():
+    result = SecantRoots("", 1.0, 2.0).solve()
+    assert result["success"] is False
+    print("OK test_error_funcion_vacia")
+
+
 if __name__ == "__main__":
     test_secant()
+    test_error_sintaxis()
+    test_error_puntos_iguales()
+    test_error_funcion_vacia()
+    print("\nTodas las pruebas de Secante completaron correctamente.")

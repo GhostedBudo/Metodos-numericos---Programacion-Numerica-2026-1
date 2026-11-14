@@ -1,11 +1,10 @@
-"""Aplicación web móvil para Bisección, Newton y Secante sobre f'(x)."""
+"""Aplicación web móvil para optimizar f(x) con Bisección, Newton y Secante."""
 from __future__ import annotations
 
 import math
 import pathlib
 import sys
 
-import numpy as np
 import sympy as sp
 from flask import Flask, jsonify, render_template, request
 
@@ -15,7 +14,7 @@ if str(ROOT) not in sys.path:
 
 from lib.bisection_method import BisectionMethod
 from lib.newton_raphson import NewtonRoots
-from lib.optimization_utils import parse_expression
+from lib.optimization_utils import build_function_spec, evaluate_curve
 from lib.secante import SecantRoots
 
 app = Flask(
@@ -46,45 +45,30 @@ def _fmt(value, digits=10):
     return f"{number:.{digits}g}"
 
 
-def _make_second_derivative(expr_str):
-    """Devuelve una función numérica f''(x) a partir de f'(x)."""
+def _make_numeric(expr):
+    """Convierte una expresión simbólica en una función numérica segura."""
     x_sym = sp.Symbol("x")
     try:
-        expr = parse_expression(expr_str)
-        second = sp.diff(expr, x_sym)
-        second_fn = sp.lambdify(x_sym, second, "numpy")
-
-        def evaluate(value):
-            try:
-                return _safe_float(second_fn(value))
-            except Exception:
-                return None
-
-        return evaluate
+        numeric_fn = sp.lambdify(x_sym, expr, "numpy")
     except Exception:
         return lambda _value: None
 
+    def evaluate(value):
+        try:
+            return _safe_float(numeric_fn(value))
+        except Exception:
+            return None
 
-def _curve_data(expr_str, lo, hi, points=320):
-    """Genera puntos (x, f'(x)) para la gráfica."""
-    x_sym = sp.Symbol("x")
-    try:
-        expr = parse_expression(expr_str)
-        fn = sp.lambdify(x_sym, expr, "numpy")
-        xs = np.linspace(lo, hi, points)
-        with np.errstate(all="ignore"):
-            ys = fn(xs)
-        if np.isscalar(ys):
-            ys = np.full(xs.shape, ys)
-        ys = np.asarray(ys).ravel()
-        if ys.size != xs.size:
-            ys = np.full(xs.shape, _safe_float(ys))
-        return {
-            "x": [_safe_float(value) for value in xs],
-            "y": [_safe_float(value) for value in ys],
-        }
-    except Exception:
-        return {"x": [], "y": []}
+    return evaluate
+
+
+def _curve_data(expr, lo, hi, points=320):
+    """Genera puntos (x, y) reales para una expresión simbólica."""
+    xs, ys = evaluate_curve(expr, lo, hi, points)
+    return {
+        "x": [_safe_float(value) for value in xs],
+        "y": [_safe_float(value) for value in ys],
+    }
 
 
 def _bisection_table(steps):
@@ -133,6 +117,8 @@ def _secant_table(history):
 def _bisection_steps_text(steps, solution):
     lines = [
         "PROCEDIMIENTO — BISECCIÓN SOBRE f'(x)",
+        f"f(x) = {solution.get('original_expr', '---')}",
+        f"f'(x) = {solution.get('derivative_expr', '---')}",
         "Objetivo: hallar x* donde f'(x*) = 0.",
         "",
         "Fórmulas:",
@@ -150,6 +136,7 @@ def _bisection_steps_text(steps, solution):
         if step.get("type") == "initial":
             lines.extend([
                 "DATOS INICIALES",
+                f"  f(x) = {solution.get('original_expr', '---')}",
                 f"  f'(x) = {step['f_expr']}",
                 f"  Intervalo = [{_fmt(step['xl'])}, {_fmt(step['xu'])}]",
                 f"  f'(xl) = {_fmt(step['f_xl'])}",
@@ -182,6 +169,7 @@ def _bisection_steps_text(steps, solution):
                 f"  x* ≈ {_fmt(step['root'])}",
                 f"  Iteraciones = {step['iterations']}",
                 f"  ea final = {_fmt(step['error'])}%",
+                f"  f(x*) = {_fmt(solution.get('original_value'))}",
                 f"  f'(x*) = {_fmt(solution['f_value'])}",
                 f"  f''(x*) = {_fmt(solution.get('second_derivative'))}",
                 f"  Clasificación: {solution.get('critical_type', 'inconcluso')}",
@@ -193,6 +181,9 @@ def _bisection_steps_text(steps, solution):
 def _newton_steps_text(history, second_fn, result):
     lines = [
         "PROCEDIMIENTO — NEWTON SOBRE f'(x)",
+        f"f(x) = {result.get('original_expr', '---')}",
+        f"f'(x) = {result.get('derivative_expr', '---')}",
+        f"f''(x) = {result.get('second_derivative_expr', '---')}",
         "Objetivo: resolver f'(x) = 0.",
         "",
         "Fórmula:",
@@ -233,6 +224,7 @@ def _newton_steps_text(history, second_fn, result):
         "═" * 60,
         "RESULTADO FINAL",
         f"  x* ≈ {_fmt(final['x'])}",
+        f"  f(x*) = {_fmt(result.get('original_value'))}",
         f"  f'(x*) = {_fmt(final['fx'])}",
         f"  f''(x*) = {_fmt(result.get('second_derivative'))}",
         f"  Clasificación: {result.get('critical_type', 'inconcluso')}",
@@ -244,6 +236,9 @@ def _newton_steps_text(history, second_fn, result):
 def _secant_steps_text(history, result):
     lines = [
         "PROCEDIMIENTO — SECANTE SOBRE f'(x)",
+        f"f(x) = {result.get('original_expr', '---')}",
+        f"f'(x) = {result.get('derivative_expr', '---')}",
+        f"f''(x) = {result.get('second_derivative_expr', '---')}",
         "Objetivo: resolver f'(x) = 0 sin calcular f''(x).",
         "",
         "Fórmula:",
@@ -283,6 +278,7 @@ def _secant_steps_text(history, result):
         "═" * 60,
         "RESULTADO FINAL",
         f"  x* ≈ {_fmt(final['x'])}",
+        f"  f(x*) = {_fmt(result.get('original_value'))}",
         f"  f'(x*) = {_fmt(final['fx'])}",
         f"  f''(x*) = {_fmt(result.get('second_derivative'))}",
         f"  Clasificación: {result.get('critical_type', 'inconcluso')}",
@@ -314,7 +310,7 @@ def solve():
 
     expr_str = str(payload.get("expr", "")).strip()
     if not expr_str:
-        return _error_response("Escribe la primera derivada f'(x).", method)
+        return _error_response("Escribe la función original f(x).", method)
 
     try:
         if method == "bisection":
@@ -344,7 +340,17 @@ def solve():
             method,
         )
 
-    second_fn = _make_second_derivative(expr_str)
+    try:
+        spec = build_function_spec(expr_str)
+    except Exception as exc:
+        return _error_response(
+            f"No se pudieron calcular f'(x) y f''(x): {exc}",
+            method,
+        )
+
+    original_fn = _make_numeric(spec["original"])
+    derivative_fn = _make_numeric(spec["derivative"])
+    second_fn = _make_numeric(spec["second_derivative"])
 
     if method == "bisection":
         solution = result["solution"]
@@ -365,6 +371,7 @@ def solve():
             {
                 "x": _safe_float(step["xr"]),
                 "y": _safe_float(step["f_xr"]),
+                "original_y": original_fn(step["xr"]),
                 "iter": step["iter"],
             }
             for step in result["steps"]
@@ -404,6 +411,7 @@ def solve():
             {
                 "x": _safe_float(point["x"]),
                 "y": _safe_float(point["fx"]),
+                "original_y": original_fn(point["x"]),
                 "iter": point["iter"],
             }
             for point in history
@@ -416,6 +424,12 @@ def solve():
 
     final_x = _safe_float(root)
     final_y = _safe_float(f_value)
+    if final_y is None:
+        final_y = derivative_fn(final_x)
+    original_value = original_fn(final_x)
+    derivative_value = derivative_fn(final_x)
+    original_curve = _curve_data(spec["original"], domain[0], domain[1])
+    derivative_curve = _curve_data(spec["derivative"], domain[0], domain[1])
     return jsonify({
         "success": True,
         "method": method,
@@ -424,6 +438,8 @@ def solve():
             "iterations": iterations,
             "error": error,
             "f_value": final_y,
+            "derivative_value": derivative_value,
+            "original_value": original_value,
             "second_derivative": second_value,
             "critical_type": critical_type,
             "classification": classification,
@@ -431,15 +447,23 @@ def solve():
             "xl_final": xl_final,
             "xu_final": xu_final,
             "message": message,
+            "original_expr": spec["original_str"],
+            "derivative_expr": spec["derivative_str"],
+            "second_derivative_expr": spec["second_derivative_str"],
         },
         "steps_text": steps_text,
         "table": table,
         "graph": {
-            "curve": _curve_data(expr_str, domain[0], domain[1]),
+            "curve": derivative_curve,
+            "original_curve": original_curve,
+            "derivative_curve": derivative_curve,
+            "original_label": f"f(x) = {spec['original_str']}",
+            "derivative_label": f"f'(x) = {spec['derivative_str']}",
             "iterations": iter_points,
             "final": {
                 "x": final_x,
                 "y": final_y,
+                "original_y": original_value,
                 "iter": final_iter,
             },
             "domain": domain,

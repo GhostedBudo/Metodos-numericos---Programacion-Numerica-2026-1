@@ -34,9 +34,10 @@ python3 -m venv .venv
 ## Versión web móvil
 
 La carpeta `webapp/` contiene una versión web responsive para usar desde
-el navegador del celular. Incluye glosario, tabla de iteraciones y
-alternancia de gráfica **2D / 3D**. Plotly se sirve localmente, así que
-las gráficas funcionan sin conexión a internet.
+el navegador del celular. Recibe `f(x)`, calcula `f'(x)` y `f''(x)`,
+incluye glosario, tabla de iteraciones, alternancia de gráfica **2D / 3D**
+y selector de curva **Ambas / f(x) / f'(x)**. Plotly se sirve localmente,
+así que las gráficas funcionan sin conexión a internet.
 
 ```powershell
 # En la PC, desde la raíz del proyecto
@@ -56,7 +57,8 @@ Desde el celular, conectado a la misma red Wi-Fi:
 El proyecto ya incluye `Dockerfile` y `.dockerignore`. La imagen usa
 Gunicorn y expone el puerto `8000`.
 
-1. Hacer commit y push de los cambios a `origin/main`.
+1. Hacer commit y push de los cambios al remoto configurado (`fork/main`
+   en este entorno).
 2. Entrar a Coolify: `http://IP_DEL_VPS:8000` (en este VPS ya está
    corriendo Coolify 4.6.0).
 3. Crear un proyecto y agregar un recurso desde el repositorio de GitHub.
@@ -75,18 +77,22 @@ sirve la versión web móvil en `/` y la API en `/api/solve`.
 
 ## Optimización univariada (f'(x) = 0)
 
-Las vistas de **Bisección**, **Newton** y **Secante** trabajan ahora en
-modo optimización: en vez de pedir `f(x)`, piden la **primera derivada
-`f'(x)`**. El programa resuelve `f'(x) = 0` para encontrar puntos
-críticos `x*` y usa `f''(x*)` para clasificarlos:
+Las vistas de **Bisección**, **Newton** y **Secante** reciben la
+**función original `f(x)`**. El programa calcula automáticamente `f'(x)` y
+`f''(x)`, resuelve `f'(x) = 0` para encontrar puntos críticos `x*` y usa
+`f''(x*)` para clasificarlos:
 
 - `f''(x*) > 0` → mínimo local.
 - `f''(x*) < 0` → máximo local.
 - `f''(x*) ≈ 0` → criterio inconcluso.
 
-Newton calcula automáticamente `f''(x)` a partir de la `f'(x)` que
-escribas, porque su fórmula es
-`x(k+1) = x(k) - f'(x(k)) / f''(x(k))`.
+Newton usa `x(k+1) = x(k) - f'(x(k)) / f''(x(k))`, donde ambas derivadas
+se obtienen simbólicamente desde `f(x)`.
+
+En la gráfica se pueden mostrar **ambas curvas** (`f(x)` en verde y
+`f'(x)` en azul) o una sola con el selector **Ambas / f(x) / f'(x)**.
+En 2D con Ambas se usa doble eje Y; en 3D se dibujan dos superficies
+separadas.
 
 ## Tests
 
@@ -101,7 +107,7 @@ escribas, porque su fórmula es
 ```
 main.py                          ← entrypoint
 lib/
-├── optimization_utils.py        ← parseo + clasificación f''(x*)
+├── optimization_utils.py        ← parseo, f'(x), f''(x), clasificación
 ├── bisection_method.py
 ├── newton_raphson.py
 └── secante.py
@@ -116,7 +122,7 @@ gui/
 webapp/
 ├── app.py                       ← Flask + API de cálculo
 ├── templates/index.html         ← interfaz móvil
-└── static/                      ← CSS + JS + Plotly 2D/3D
+└── static/                      ← CSS + JS + Plotly 2D/3D y curvas duales
 ```
 
 La app solo carga las tres vistas de optimización. Los archivos de
@@ -127,9 +133,9 @@ se importan al arrancar.
 
 | Método | Entrada | Autor |
 |--------|---------|-------|
-| Bisección | `f'(x)` | Raimir Linarez |
-| Newton | `f'(x)` | Carlos Paradas |
-| Secante | `f'(x)` | Carlos Paradas |
+| Bisección | `f(x)` → calcula `f'(x)` | Raimir Linarez |
+| Newton | `f(x)` → calcula `f'(x)`, `f''(x)` | Carlos Paradas |
+| Secante | `f(x)` → calcula `f'(x)` | Carlos Paradas |
 
 ## Cómo agregar un nuevo método numérico
 

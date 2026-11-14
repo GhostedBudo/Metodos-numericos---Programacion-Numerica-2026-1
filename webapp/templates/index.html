@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1220">
-  <title>Optimización Numérica — f'(x)=0</title>
+  <title>Optimización Numérica — f(x) y f'(x)</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <script src="{{ url_for('static', filename='plotly.min.js') }}"></script>
 </head>
@@ -12,7 +12,7 @@
   <header class="topbar">
     <div>
       <h1>Optimización Numérica</h1>
-      <p>Bisección · Newton · Secante sobre f'(x)</p>
+      <p>Bisección · Newton · Secante a partir de f(x)</p>
     </div>
     <span class="badge">f'(x) = 0</span>
   </header>
@@ -26,12 +26,12 @@
   <main class="layout">
     <section class="card input-card">
       <h2 id="formTitle">Bisección</h2>
-      <p class="hint" id="formHint">Requiere un intervalo [xl, xu] con cambio de signo en f'(x).</p>
+      <p class="hint" id="formHint">Requiere un intervalo [xl, xu] con cambio de signo en f'(x), calculada desde f(x).</p>
 
       <form id="bisectionForm" class="method-form active" data-method="bisection">
         <label class="field">
-          <span>Primera derivada f'(x)</span>
-          <input id="b_expr" value="3*x**2 - 3" autocomplete="off" spellcheck="false">
+          <span>Función original f(x)</span>
+          <input id="b_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
         </label>
         <div class="two-cols">
           <label class="field"><span>xl (límite inferior)</span><input id="b_xl" value="0" inputmode="decimal"></label>
@@ -43,8 +43,8 @@
 
       <form id="newtonForm" class="method-form" data-method="newton">
         <label class="field">
-          <span>Primera derivada f'(x)</span>
-          <input id="n_expr" value="3*x**2 - 3" autocomplete="off" spellcheck="false">
+          <span>Función original f(x)</span>
+          <input id="n_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
         </label>
         <div class="two-cols">
           <label class="field"><span>x0 (inicial)</span><input id="n_x0" value="0.5" inputmode="decimal"></label>
@@ -57,8 +57,8 @@
 
       <form id="secantForm" class="method-form" data-method="secant">
         <label class="field">
-          <span>Primera derivada f'(x)</span>
-          <input id="s_expr" value="3*x**2 - 3" autocomplete="off" spellcheck="false">
+          <span>Función original f(x)</span>
+          <input id="s_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
         </label>
         <div class="two-cols">
           <label class="field"><span>x0 (inicial)</span><input id="s_x0" value="0.5" inputmode="decimal"></label>
@@ -72,7 +72,7 @@
 
       <button type="button" class="primary" id="calcBtn">Calcular</button>
       <div id="errorBox" class="error hidden" role="alert"></div>
-      <p class="hint">Usa <code>*</code> para multiplicar. Acepta <code>sen</code>, <code>ln</code>, <code>e</code>, <code>^</code>.</p>
+      <p class="hint">Escribe f(x). El sistema calcula f'(x) y f''(x). Usa <code>*</code> para multiplicar. Acepta <code>sen</code>, <code>ln</code>, <code>e</code>, <code>^</code>.</p>
     </section>
 
     <section class="card output-card">
@@ -114,11 +114,16 @@
             <button type="button" id="btn2d" class="active">2D</button>
             <button type="button" id="btn3d">3D</button>
           </div>
-          <span class="hint">La vista 3D muestra f'(x) como superficie y la curva de iteraciones sobre el centro.</span>
+          <div class="segmented" role="group" aria-label="Curva visible">
+            <button type="button" id="btnBoth" class="active">Ambas</button>
+            <button type="button" id="btnOriginal">f(x)</button>
+            <button type="button" id="btnDerivative">f'(x)</button>
+          </div>
+          <span class="hint">Ambas usa doble eje Y. La vista 3D separa f(x) y f'(x) en dos superficies.</span>
         </div>
         <div id="plot" class="plot"></div>
         <p class="legend" id="graphLegend">
-          Eje x = valores de x. Eje y = f'(x). Curva azul = f'(x). Línea punteada = y=0.
+          Eje x = valores de x. Curva verde = f(x). Curva azul = f'(x). Línea punteada = f'(x)=0.
           Puntos naranjas = iteraciones. Estrella verde = x*.
         </p>
       </div>
@@ -132,7 +137,8 @@
             <dt>xr</dt><dd>Punto medio (xl + xu)/2. Aproximación del punto crítico.</dd>
             <dt>x_i / x(k)</dt><dd>Aproximación actual dentro de Newton o Secante.</dd>
             <dt>x*</dt><dd>Punto crítico final donde f'(x*) ≈ 0.</dd>
-            <dt>f'(x)</dt><dd>Primera derivada. Resolver f'(x)=0 busca mínimos o máximos.</dd>
+            <dt>f(x)</dt><dd>Función original que escribe el usuario. Se grafica en verde.</dd>
+            <dt>f'(x)</dt><dd>Primera derivada calculada automáticamente. Resolver f'(x)=0 busca mínimos o máximos.</dd>
             <dt>f''(x*)</dt><dd>Segunda derivada en x*. &gt;0 mínimo, &lt;0 máximo, ≈0 inconcluso.</dd>
             <dt>fp</dt><dd>Abreviatura de f'(x) en las tablas.</dd>
             <dt>fpp</dt><dd>Abreviatura de f''(x) en las tablas.</dd>
@@ -143,13 +149,15 @@
           <h3>Cómo leer la gráfica</h3>
           <ul>
             <li>Eje x: valores de x.</li>
-            <li>Eje y: valores de f'(x).</li>
-            <li>Curva azul: f'(x).</li>
-            <li>Línea negra o punteada: y = 0, donde buscamos el corte.</li>
+            <li>Eje y izquierdo: f(x). Eje y derecho: f'(x) cuando eliges Ambas.</li>
+            <li>Curva verde: f(x), la función original.</li>
+            <li>Curva azul: f'(x), calculada automáticamente.</li>
+            <li>Línea punteada: f'(x) = 0, donde buscamos el punto crítico.</li>
             <li>Puntos naranjas: aproximaciones de cada iteración.</li>
-            <li>Estrella verde: x* final.</li>
+            <li>Estrella verde: x* final sobre la curva seleccionada.</li>
             <li>Zona sombreada: intervalo inicial [xl, xu] en Bisección.</li>
-            <li>Vista 3D: superficie de f'(x) y eje de iteración; los puntos bajan hacia f'(x)=0.</li>
+            <li>Selector Ambas / f(x) / f'(x): elige qué curvas mostrar.</li>
+            <li>Vista 3D: dos superficies separadas, una para f(x) y otra para f'(x).</li>
           </ul>
           <h3>Clasificación</h3>
           <ul>

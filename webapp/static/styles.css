@@ -301,6 +301,25 @@ code {
   font-size: 1.02rem;
 }
 
+.summary-formulas {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(11, 18, 32, 0.6);
+}
+
+.summary-formulas p {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.summary-formulas code {
+  color: #dbe9ff;
+}
+
 .summary-message {
   margin: 10px 0 0;
   color: #b9dcff;

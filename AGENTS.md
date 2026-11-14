@@ -40,10 +40,15 @@ and by launching the GUI.
 
 ## Optimización univariada
 
-Las vistas de Bisección, Newton y Secante reciben la primera derivada
-`f'(x)` (no `f(x)`) y resuelven `f'(x)=0` para hallar puntos críticos.
-`lib/optimization_utils.py` centraliza el parseo de expresiones y la
-clasificación mediante `f''(x*)` (mínimo, máximo o inconcluso).
+Las vistas de Bisección, Newton y Secante reciben la función original
+`f(x)`. `lib/optimization_utils.py` calcula `f'(x)` y `f''(x)`, centraliza
+el parseo y clasifica el punto crítico con `f''(x*)` (mínimo, máximo o
+inconcluso). Los solvers resuelven `f'(x)=0`.
+
+Los resultados y la API incluyen `original_expr`, `derivative_expr`,
+`second_derivative_expr`, `original_value` y `derivative_value`.
+En las gráficas hay selector **Ambas / f(x) / f'(x)**: 2D usa doble eje Y
+cuando se muestran ambas curvas; 3D usa dos superficies separadas.
 
 ## Architecture
 
@@ -52,7 +57,7 @@ Feature-oriented layout. Each active method is a self-contained folder under `gu
 ```
 main.py                       ← entrypoint (imports GaussSimpleApp)
 lib/                          ← pure math implementations (no UI deps)
-  optimization_utils.py       ← parseo + clasificación f''(x*)
+  optimization_utils.py       ← parseo, f'(x), f''(x), clasificación
   bisection_method.py
   newton_raphson.py
   secante.py
@@ -72,7 +77,7 @@ webapp/
   app.py                      ← Flask + API /api/solve
   templates/index.html        ← interfaz responsive móvil
   static/styles.css
-  static/app.js               ← Plotly 2D/3D, tabla, pasos, glosario
+  static/app.js               ← Plotly 2D/3D, curvas duales, tabla, pasos
 ```
 
 Los archivos de métodos anteriores pueden seguir en disco, pero no se
@@ -93,7 +98,9 @@ importan ni aparecen en la interfaz.
 6. Keep the graph legend and a **Glosario** tab explaining symbols,
    classification, table abbreviations, and how to read the graph.
 7. Keep the graph's **2D / 3D** switch in both the desktop and web versions.
-8. All UI text, comments, and docstrings in Spanish.
+8. Keep the **Ambas / f(x) / f'(x)** curve selector. In 2D use a twin Y axis
+   for Ambas; in 3D use two separated surfaces.
+9. All UI text, comments, and docstrings in Spanish.
 
 ## Dependencies
 

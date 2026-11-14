@@ -8,7 +8,8 @@ from gui.theme import COLOR_BG
 class GaussSimpleApp(ctk.CTk):
     """
     Contenedor principal de la aplicación de optimización.
-    Solo contiene los métodos de Bisección, Newton y Secante sobre f'(x).
+    Contiene Bisección, Newton y Secante; recibe f(x), calcula sus
+    derivadas y resuelve f'(x) = 0.
     """
 
     def __init__(self):
@@ -16,7 +17,7 @@ class GaussSimpleApp(ctk.CTk):
 
         ctk.set_appearance_mode("dark")
 
-        self.title("Optimización Numérica — f'(x) = 0")
+        self.title("Optimización Numérica — f(x) y f'(x)")
 
         width = 1300
         height = 800

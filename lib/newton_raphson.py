@@ -1,14 +1,17 @@
 """Newton-Raphson aplicado a optimización. Ver docs/metodos/newton_raphson.md.
 
-La entrada es la primera derivada de la función que se quiere optimizar.
-El método resuelve f'(x) = 0 usando:
+La entrada es la función original f(x). El método calcula f'(x) y f''(x)
+y resuelve f'(x) = 0 usando:
     x_{k+1} = x_k - f'(x_k) / f''(x_k)
-La segunda derivada se calcula automáticamente con sympy.
 """
 import numpy as np
 import sympy as sp
 
-from lib.optimization_utils import classify_critical_point, parse_expression
+from lib.optimization_utils import (
+    classify_critical_point,
+    evaluate_expression,
+    parse_expression,
+)
 
 
 def _parse_expression(func_str):
@@ -26,56 +29,75 @@ class NewtonRoots:
         self.history = []
 
     def solve(self):
-        x = sp.Symbol('x')
+        self.history = []
+        x = sp.Symbol("x")
 
         try:
-            f_expr = _parse_expression(self.func_str)
-            df_expr = sp.diff(f_expr, x)
-            f = sp.lambdify(x, f_expr, 'numpy')
-            df = sp.lambdify(x, df_expr, 'numpy')
+            original_expr = _parse_expression(self.func_str)
+            df_expr = sp.diff(original_expr, x)
+            ddf_expr = sp.diff(df_expr, x)
+            df = sp.lambdify(x, df_expr, "numpy")
+            ddf = sp.lambdify(x, ddf_expr, "numpy")
         except Exception as e:
             return {
                 "success": False,
                 "solution": None,
                 "steps": [],
-                "error_message": f"Error de sintaxis en la función: {str(e)}"
+                "error_message": f"Error de sintaxis en la función original f(x): {str(e)}"
             }
+
+        expr_info = {
+            "original_expr": str(original_expr),
+            "derivative_expr": str(df_expr),
+            "second_derivative_expr": str(ddf_expr),
+        }
 
         x_current = self.x0
         iter_count = 0
-        error = float('inf')
+        error = float("inf")
 
         try:
             while iter_count < self.max_iter:
-                fx_val = f(x_current)
-                dfx_val = df(x_current)
+                fp_val = df(x_current)
+                fpp_val = ddf(x_current)
 
                 # BLINDAJE CONTRA INDETERMINACIONES (NaN, Inf, Complejos)
-                if np.isnan(fx_val) or np.isnan(dfx_val) or np.isinf(fx_val) or np.isinf(dfx_val) or isinstance(fx_val, complex) or isinstance(dfx_val, complex):
-                    raise TypeError("La primera o la segunda derivada no están definidas matemáticamente en este punto (Resultado no real, NaN o Infinito).")
+                if (np.isnan(fp_val) or np.isnan(fpp_val)
+                        or np.isinf(fp_val) or np.isinf(fpp_val)
+                        or isinstance(fp_val, complex)
+                        or isinstance(fpp_val, complex)):
+                    raise TypeError(
+                        "La primera o la segunda derivada no están definidas "
+                        "matemáticamente en este punto (resultado no real, "
+                        "NaN o infinito)."
+                    )
 
-                fx = float(fx_val)
-                dfx = float(dfx_val)
+                fp = float(fp_val)
+                fpp = float(fpp_val)
 
                 self.history.append({
                     "iter": iter_count,
                     "x": x_current,
-                    "fx": fx,
+                    "fx": fp,
                     "error": error if iter_count > 0 else None
                 })
 
-                if abs(fx) <= self.tol:
+                if abs(fp) <= self.tol:
                     break
 
-                if dfx == 0:
+                if fpp == 0:
                     return {
                         "success": False,
                         "solution": None,
                         "steps": self.history,
-                        "error_message": f"La segunda derivada f''(x) se hizo cero en x = {x_current:.6f}. El método falla (división por cero)."
+                        "error_message": (
+                            f"La segunda derivada f''(x) se hizo cero en "
+                            f"x = {x_current:.6f}. El método falla "
+                            f"(división por cero)."
+                        )
                     }
 
-                x_new = x_current - (fx / dfx)
+                x_new = x_current - (fp / fpp)
 
                 if x_new != 0:
                     error = abs((x_new - x_current) / x_new) * 100
@@ -86,31 +108,45 @@ class NewtonRoots:
                 iter_count += 1
 
                 if error <= self.tol:
-                    # Validar también el último punto calculado
-                    fx_final = f(x_current)
-                    if np.isnan(fx_final) or isinstance(fx_final, complex):
-                        raise TypeError("El punto de convergencia final cayó en una zona indefinida de la primera derivada.")
-                    
+                    fp_final = evaluate_expression(df_expr, x_current)
+                    if fp_final is None:
+                        raise TypeError(
+                            "El punto de convergencia final cayó en una zona "
+                            "indefinida de la primera derivada."
+                        )
+
                     self.history.append({
                         "iter": iter_count,
                         "x": x_current,
-                        "fx": float(fx_final),
+                        "fx": fp_final,
                         "error": error
                     })
                     break
 
+            derivative_value = evaluate_expression(df_expr, x_current)
+            original_value = evaluate_expression(original_expr, x_current)
             if iter_count < self.max_iter or error <= self.tol:
-                msg = f"Converge por error aceptable. Punto crítico: {x_current:.6f} (f'(x) = {float(f(x_current)):.2e})"
+                msg = (
+                    f"Converge por error aceptable. Punto crítico: "
+                    f"{x_current:.6f} (f'(x) = {derivative_value:.2e})"
+                )
             else:
-                msg = f"Alcanzó el máximo de {self.max_iter} iteraciones sin converger. Mejor aproximación: {x_current:.6f}"
+                msg = (
+                    f"Alcanzó el máximo de {self.max_iter} iteraciones sin "
+                    f"converger. Mejor aproximación: {x_current:.6f}"
+                )
 
-            classification = classify_critical_point(f_expr, x_current)
+            classification = classify_critical_point(
+                df_expr, x_current, second_expr=ddf_expr)
             return {
                 "success": True,
                 "solution": x_current,
                 "steps": self.history,
                 "message": msg,
                 "error_message": None,
+                "original_value": original_value,
+                "derivative_value": derivative_value,
+                **expr_info,
                 **classification,
             }
 
@@ -119,7 +155,10 @@ class NewtonRoots:
                 "success": False,
                 "solution": None,
                 "steps": self.history,
-                "error_message": f"Desbordamiento matemático en iteración {iter_count}.\nLos valores crecieron al infinito (Divergencia)."
+                "error_message": (
+                    f"Desbordamiento matemático en iteración {iter_count}.\n"
+                    f"Los valores crecieron al infinito (divergencia)."
+                )
             }
         except TypeError as e:
             return {
@@ -133,5 +172,8 @@ class NewtonRoots:
                 "success": False,
                 "solution": None,
                 "steps": self.history,
-                "error_message": f"Error matemático inesperado en iteración {iter_count}:\n{str(e)}"
+                "error_message": (
+                    f"Error matemático inesperado en iteración "
+                    f"{iter_count}:\n{str(e)}"
+                )
             }

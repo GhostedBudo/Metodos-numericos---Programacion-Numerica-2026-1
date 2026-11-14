@@ -1,14 +1,15 @@
 """Utilidades para optimización univariada.
 
-En optimización no se buscan raíces de f(x), sino puntos críticos:
-valores x* donde la primera derivada se anula, es decir f'(x*) = 0.
-
-Por eso los métodos de bisección, Newton y secante reciben como entrada
-la primera derivada g(x) = f'(x). La segunda derivada g'(x) = f''(x)
-sirve para clasificar el punto crítico como mínimo o máximo.
+La entrada del usuario es la función original f(x). A partir de ella se
+calculan simbólicamente la primera derivada f'(x) y la segunda derivada
+f''(x). Los métodos de bisección, Newton y secante resuelven f'(x) = 0
+para encontrar puntos críticos. La segunda derivada sirve para clasificar
+el punto crítico como mínimo o máximo.
 """
+import math
 import re
 
+import numpy as np
 import sympy as sp
 
 
@@ -45,7 +46,63 @@ def parse_expression(expr_str):
     )
 
 
-def classify_critical_point(deriv_expr, x_value, tol=1e-8):
+def build_function_spec(func_str):
+    """Calcula f(x), f'(x) y f''(x) a partir de la función original.
+
+    Devuelve un diccionario con las expresiones simbólicas y sus textos.
+    """
+    x = sp.Symbol("x")
+    original = parse_expression(func_str)
+    derivative = sp.diff(original, x)
+    second_derivative = sp.diff(derivative, x)
+    return {
+        "original": original,
+        "derivative": derivative,
+        "second_derivative": second_derivative,
+        "original_str": str(original),
+        "derivative_str": str(derivative),
+        "second_derivative_str": str(second_derivative),
+    }
+
+
+def evaluate_expression(expr, value):
+    """Evalúa una expresión simbólica en un punto y devuelve float o None."""
+    x = sp.Symbol("x")
+    try:
+        result = complex(sp.N(expr.subs(x, value)))
+    except Exception:
+        return None
+    if abs(result.imag) > 1e-9 or not math.isfinite(result.real):
+        return None
+    return float(result.real)
+
+
+def evaluate_curve(expr, lo, hi, points=320):
+    """Genera puntos (x, y) reales para una expresión simbólica.
+
+    Los valores complejos, infinitos o indefinidos se convierten en NaN
+    para que matplotlib/Plotly simplemente interrumpan la curva.
+    """
+    x = sp.Symbol("x")
+    try:
+        fn = sp.lambdify(x, expr, "numpy")
+        xs = np.linspace(float(lo), float(hi), int(points))
+        with np.errstate(all="ignore"):
+            ys = fn(xs)
+        if np.isscalar(ys):
+            ys = np.full(xs.shape, ys)
+        ys = np.asarray(ys).ravel()
+        if ys.size != xs.size:
+            value = ys.flat[0] if ys.size else np.nan
+            ys = np.full(xs.shape, value)
+        if np.iscomplexobj(ys):
+            ys = np.where(np.abs(ys.imag) <= 1e-9, ys.real, np.nan)
+        return xs, np.asarray(ys, dtype=float)
+    except Exception:
+        return np.array([]), np.array([])
+
+
+def classify_critical_point(deriv_expr, x_value, tol=1e-8, second_expr=None):
     """Clasifica x* usando el criterio de la segunda derivada.
 
     Recibe la primera derivada f'(x) y el punto crítico x*.
@@ -58,9 +115,13 @@ def classify_critical_point(deriv_expr, x_value, tol=1e-8):
     x = sp.Symbol("x")
 
     try:
-        second_expr = sp.diff(deriv_expr, x)
-        second_val = float(sp.N(second_expr.subs(x, x_value)))
+        if second_expr is None:
+            second_expr = sp.diff(deriv_expr, x)
+        second_val = evaluate_expression(second_expr, x_value)
     except Exception:
+        second_val = None
+
+    if second_val is None:
         return {
             "second_derivative": None,
             "second_derivative_expr": None,
@@ -98,7 +159,7 @@ def classify_critical_point(deriv_expr, x_value, tol=1e-8):
 def reconstruct_function(deriv_expr):
     """Reconstruye f(x) integrando f'(x), tomando la constante de integración 0.
 
-    La constante no cambia la ubicación de los puntos críticos.
+    Se conserva por compatibilidad. La aplicación ya recibe f(x) directamente.
     Devuelve None si sympy no puede integrar la expresión.
     """
     x = sp.Symbol("x")

@@ -2,6 +2,7 @@ const state = {
   method: "bisection",
   data: null,
   graphMode: "2d",
+  curveMode: "both",
   activeTab: "summary",
   loading: false,
 };
@@ -9,15 +10,15 @@ const state = {
 const methodMeta = {
   bisection: {
     title: "Bisección",
-    hint: "Requiere un intervalo [xl, xu] con cambio de signo en f'(x).",
+    hint: "Requiere un intervalo [xl, xu] con cambio de signo en f'(x), calculada desde f(x).",
   },
   newton: {
     title: "Newton",
-    hint: "Usa x0 y calcula f''(x) automáticamente para resolver f'(x)=0.",
+    hint: "Usa x0. Calcula f'(x) y f''(x) desde f(x) para resolver f'(x)=0.",
   },
   secant: {
     title: "Secante",
-    hint: "Usa dos puntos iniciales x0 y x1. No necesita f''(x).",
+    hint: "Usa dos puntos iniciales x0 y x1. Calcula f'(x) desde f(x).",
   },
 };
 
@@ -58,6 +59,8 @@ function setMethod(method) {
 
   $("#formTitle").textContent = methodMeta[method].title;
   $("#formHint").textContent = methodMeta[method].hint;
+  $("#btn2d").classList.add("active");
+  $("#btn3d").classList.remove("active");
   hideError();
   resetOutputs();
 }
@@ -79,6 +82,14 @@ function setGraphMode(mode) {
   state.graphMode = mode;
   $("#btn2d").classList.toggle("active", mode === "2d");
   $("#btn3d").classList.toggle("active", mode === "3d");
+  renderGraph();
+}
+
+function setCurveMode(mode) {
+  state.curveMode = mode;
+  $("#btnBoth").classList.toggle("active", mode === "both");
+  $("#btnOriginal").classList.toggle("active", mode === "original");
+  $("#btnDerivative").classList.toggle("active", mode === "derivative");
   renderGraph();
 }
 
@@ -194,7 +205,8 @@ function renderSummary(data) {
     ["x* (punto crítico)", fmt(summary.root, 10)],
     ["Iteraciones", summary.iterations],
     ["Error final ea", `${fmt(summary.error, 8)} %`],
-    ["f'(x*)", fmt(summary.f_value, 8)],
+    ["f(x*)", fmt(summary.original_value, 8)],
+    ["f'(x*)", fmt(summary.derivative_value ?? summary.f_value, 8)],
     ["f''(x*)", fmt(summary.second_derivative, 8)],
     ["Clasificación", summary.critical_type || "inconcluso"],
     ["Intervalo final", finalInterval],
@@ -215,8 +227,17 @@ function renderSummary(data) {
     ? `<div class="classification">${escapeHtml(summary.classification)}</div>`
     : "";
 
+  const formulas = `
+    <div class="summary-formulas">
+      <p>f(x) = <code>${escapeHtml(summary.original_expr)}</code></p>
+      <p>f'(x) = <code>${escapeHtml(summary.derivative_expr)}</code></p>
+      <p>f''(x) = <code>${escapeHtml(summary.second_derivative_expr)}</code></p>
+    </div>
+  `;
+
   $("#summaryContent").innerHTML = `
     <p class="hint">Método: <strong>${escapeHtml(methodMeta[data.method].title)}</strong></p>
+    ${formulas}
     <div class="summary-grid">${cards}</div>
     ${message}
     ${classification}
@@ -274,9 +295,19 @@ function renderTable(data) {
   }).join("");
 }
 
-function base2DLayout(data) {
+function curveData(graph, key) {
+  if (key === "original") {
+    return graph.original_curve || { x: [], y: [] };
+  }
+  return graph.derivative_curve || graph.curve || { x: [], y: [] };
+}
+
+function base2DLayout(data, curveMode) {
   const domain = data.graph.domain;
   const shapes = [];
+  const showOriginal = curveMode !== "derivative";
+  const showDerivative = curveMode !== "original";
+  const both = showOriginal && showDerivative;
 
   if (data.graph.initial_interval) {
     shapes.push({
@@ -293,7 +324,7 @@ function base2DLayout(data) {
     });
   }
 
-  return {
+  const layout = {
     paper_bgcolor: "#0b1220",
     plot_bgcolor: "#0b1220",
     font: { color: "#e8f1ff", family: "Inter, system-ui, sans-serif" },
@@ -307,7 +338,8 @@ function base2DLayout(data) {
       range: [domain[0], domain[1]],
     },
     yaxis: {
-      title: "f'(x)",
+      title: showOriginal ? "f(x)" : "f'(x)",
+      titlefont: { color: showOriginal ? "#2ca02c" : "#58a1d3" },
       gridcolor: "#243653",
       zerolinecolor: "#243653",
     },
@@ -317,123 +349,235 @@ function base2DLayout(data) {
       font: { size: 10 },
     },
   };
+
+  if (both) {
+    layout.yaxis2 = {
+      title: "f'(x)",
+      titlefont: { color: "#58a1d3" },
+      overlaying: "y",
+      side: "right",
+      showgrid: false,
+      zerolinecolor: "#243653",
+    };
+  }
+
+  return layout;
 }
 
 function plot2D(data) {
   const graph = data.graph;
+  const mode = state.curveMode;
+  const showOriginal = mode !== "derivative";
+  const showDerivative = mode !== "original";
+  const both = showOriginal && showDerivative;
+  const originalCurve = curveData(graph, "original");
+  const derivativeCurve = curveData(graph, "derivative");
   const traces = [];
 
-  traces.push({
-    x: graph.curve.x,
-    y: graph.curve.y,
-    mode: "lines",
-    name: "f'(x)",
-    line: { color: "#58a1d3", width: 3 },
-    connectgaps: false,
-  });
+  if (showOriginal) {
+    traces.push({
+      x: originalCurve.x,
+      y: originalCurve.y,
+      mode: "lines",
+      name: graph.original_label || "f(x)",
+      line: { color: "#2ca02c", width: 3 },
+      connectgaps: false,
+    });
+  }
 
-  traces.push({
-    x: graph.domain,
-    y: [0, 0],
-    mode: "lines",
-    name: "f'(x) = 0",
-    line: { color: "#93a6c4", width: 1.4, dash: "dash" },
-  });
+  if (showDerivative) {
+    traces.push({
+      x: derivativeCurve.x,
+      y: derivativeCurve.y,
+      mode: "lines",
+      name: graph.derivative_label || "f'(x)",
+      yaxis: both ? "y2" : "y",
+      line: { color: "#58a1d3", width: 3 },
+      connectgaps: false,
+    });
+
+    traces.push({
+      x: graph.domain,
+      y: [0, 0],
+      mode: "lines",
+      name: "f'(x) = 0",
+      yaxis: both ? "y2" : "y",
+      line: { color: "#93a6c4", width: 1.4, dash: "dash" },
+    });
+  }
 
   if (graph.iterations.length) {
+    const useOriginal = mode === "original";
     traces.push({
       x: graph.iterations.map((point) => point.x),
-      y: graph.iterations.map((point) => point.y),
+      y: graph.iterations.map((point) => (
+        useOriginal ? point.original_y : point.y
+      )),
       mode: "lines+markers",
-      name: "Iteraciones",
+      name: useOriginal ? "Iteraciones sobre f(x)" : "Iteraciones sobre f'(x)",
+      yaxis: useOriginal ? "y" : (both ? "y2" : "y"),
       line: { color: "#ff9f43", width: 1.6, dash: "dot" },
       marker: { color: "#ff9f43", size: 7 },
     });
+
+    if (both) {
+      traces.push({
+        x: graph.iterations.map((point) => point.x),
+        y: graph.iterations.map((point) => point.original_y),
+        mode: "markers",
+        name: "Iteraciones sobre f(x)",
+        yaxis: "y",
+        marker: { color: "#2ca02c", size: 5, opacity: 0.55 },
+        hoverinfo: "skip",
+        showlegend: false,
+      });
+    }
   }
 
   if (graph.final && graph.final.x !== null) {
-    traces.push({
-      x: [graph.final.x],
-      y: [graph.final.y],
-      mode: "markers",
-      name: `x* ≈ ${fmt(graph.final.x, 6)}`,
-      marker: { color: "#2ca02c", size: 17, symbol: "star" },
-    });
+    if (showOriginal) {
+      traces.push({
+        x: [graph.final.x],
+        y: [graph.final.original_y],
+        mode: "markers",
+        name: `x* ≈ ${fmt(graph.final.x, 6)} sobre f(x)`,
+        yaxis: "y",
+        marker: { color: "#2ca02c", size: 17, symbol: "star" },
+      });
+    }
+    if (showDerivative) {
+      traces.push({
+        x: [graph.final.x],
+        y: [graph.final.y],
+        mode: "markers",
+        name: `x* ≈ ${fmt(graph.final.x, 6)} sobre f'(x)`,
+        yaxis: both ? "y2" : "y",
+        marker: { color: "#2ca02c", size: 17, symbol: "star" },
+      });
+    }
   }
 
-  Plotly.react($("#plot"), traces, base2DLayout(data), {
+  Plotly.react($("#plot"), traces, base2DLayout(data, mode), {
     responsive: true,
     displaylogo: false,
     scrollZoom: false,
   });
 }
 
+function surfacePoints(curve) {
+  const xs = [];
+  const zs = [];
+  for (let index = 0; index < curve.x.length; index += 1) {
+    const x = curve.x[index];
+    const y = curve.y[index];
+    if (x !== null && y !== null) {
+      xs.push(x);
+      zs.push(y);
+    }
+  }
+  return { xs, zs };
+}
+
 function plot3D(data) {
   const graph = data.graph;
-  const points = [];
+  const mode = state.curveMode;
+  const showOriginal = mode !== "derivative";
+  const showDerivative = mode !== "original";
+  const both = showOriginal && showDerivative;
+  const originalCurve = curveData(graph, "original");
+  const derivativeCurve = curveData(graph, "derivative");
+  const originalBand = both ? [-0.9, -0.3] : [-1, 1];
+  const derivativeBand = both ? [0.3, 0.9] : [-1, 1];
+  const originalY = both ? -0.6 : 0;
+  const derivativeY = both ? 0.6 : 0;
+  const traces = [];
 
-  for (let index = 0; index < graph.curve.x.length; index += 1) {
-    const x = graph.curve.x[index];
-    const y = graph.curve.y[index];
-    if (x !== null && y !== null) {
-      points.push({ x, y });
+  if (showOriginal) {
+    const original = surfacePoints(originalCurve);
+    if (original.xs.length >= 2) {
+      traces.push({
+        type: "surface",
+        x: original.xs,
+        y: originalBand,
+        z: [original.zs, original.zs],
+        colorscale: [[0, "#0f4c2a"], [0.55, "#1f7a3d"], [1, "#2ca02c"]],
+        opacity: 0.82,
+        showscale: false,
+        name: graph.original_label || "f(x)",
+        hovertemplate: "x = %{x}<br>f(x) = %{z}<extra></extra>",
+      });
     }
   }
 
-  const xs = points.map((point) => point.x);
-  const zs = points.map((point) => point.y);
-  const traces = [];
+  if (showDerivative) {
+    const derivative = surfacePoints(derivativeCurve);
+    if (derivative.xs.length >= 2) {
+      traces.push({
+        type: "surface",
+        x: derivative.xs,
+        y: derivativeBand,
+        z: [derivative.zs, derivative.zs],
+        colorscale: [[0, "#0f4c81"], [0.55, "#2f7fb8"], [1, "#58a1d3"]],
+        opacity: 0.82,
+        showscale: false,
+        name: graph.derivative_label || "f'(x)",
+        hovertemplate: "x = %{x}<br>f'(x) = %{z}<extra></extra>",
+      });
 
-  if (xs.length >= 2) {
-    traces.push({
-      type: "surface",
-      x: xs,
-      y: [-1, 1],
-      z: [zs, zs],
-      colorscale: [[0, "#0f4c81"], [0.55, "#2f7fb8"], [1, "#58a1d3"]],
-      opacity: 0.82,
-      showscale: false,
-      name: "f'(x)",
-      hovertemplate: "x = %{x}<br>f'(x) = %{z}<extra></extra>",
-    });
-
-    const zeroRow = xs.map(() => 0);
-    traces.push({
-      type: "surface",
-      x: xs,
-      y: [-1, 1],
-      z: [zeroRow, zeroRow],
-      colorscale: [[0, "#93a6c4"], [1, "#93a6c4"]],
-      opacity: 0.16,
-      showscale: false,
-      name: "f'(x) = 0",
-      hoverinfo: "skip",
-    });
+      const zeroRow = derivative.xs.map(() => 0);
+      traces.push({
+        type: "surface",
+        x: derivative.xs,
+        y: derivativeBand,
+        z: [zeroRow, zeroRow],
+        colorscale: [[0, "#93a6c4"], [1, "#93a6c4"]],
+        opacity: 0.16,
+        showscale: false,
+        name: "f'(x) = 0",
+        hoverinfo: "skip",
+      });
+    }
   }
 
   if (graph.iterations.length) {
+    const useOriginal = mode === "original";
     traces.push({
       type: "scatter3d",
       x: graph.iterations.map((point) => point.x),
-      y: graph.iterations.map(() => 0),
-      z: graph.iterations.map((point) => point.y),
+      y: graph.iterations.map(() => (useOriginal ? 0 : derivativeY)),
+      z: graph.iterations.map((point) => (
+        useOriginal ? point.original_y : point.y
+      )),
       mode: "lines+markers",
-      name: "Iteraciones",
+      name: useOriginal ? "Iteraciones sobre f(x)" : "Iteraciones sobre f'(x)",
       line: { color: "#ff9f43", width: 5 },
       marker: { color: "#ff9f43", size: 3.5 },
     });
   }
 
   if (graph.final && graph.final.x !== null) {
-    traces.push({
-      type: "scatter3d",
-      x: [graph.final.x],
-      y: [0],
-      z: [graph.final.y],
-      mode: "markers",
-      name: "x*",
-      marker: { color: "#2ca02c", size: 7, symbol: "diamond" },
-    });
+    if (showOriginal) {
+      traces.push({
+        type: "scatter3d",
+        x: [graph.final.x],
+        y: [originalY],
+        z: [graph.final.original_y],
+        mode: "markers",
+        name: "x* sobre f(x)",
+        marker: { color: "#2ca02c", size: 7, symbol: "diamond" },
+      });
+    }
+    if (showDerivative) {
+      traces.push({
+        type: "scatter3d",
+        x: [graph.final.x],
+        y: [derivativeY],
+        z: [graph.final.y],
+        mode: "markers",
+        name: "x* sobre f'(x)",
+        marker: { color: "#2ca02c", size: 7, symbol: "diamond" },
+      });
+    }
   }
 
   const axisStyle = {
@@ -444,6 +588,7 @@ function plot3D(data) {
     titlefont: { color: "#e8f1ff", size: 11 },
   };
 
+  const zTitle = both ? "f(x) / f'(x)" : (showOriginal ? "f(x)" : "f'(x)");
   const layout = {
     paper_bgcolor: "#0b1220",
     plot_bgcolor: "#0b1220",
@@ -454,8 +599,12 @@ function plot3D(data) {
     scene: {
       bgcolor: "#0b1220",
       xaxis: { ...axisStyle, title: "x" },
-      yaxis: { ...axisStyle, title: "y (profundidad)", range: [-1.2, 1.2] },
-      zaxis: { ...axisStyle, title: "f'(x)" },
+      yaxis: {
+        ...axisStyle,
+        title: both ? "f(x) ↔ f'(x)" : "profundidad",
+        range: [-1.2, 1.2],
+      },
+      zaxis: { ...axisStyle, title: zTitle },
       camera: { eye: { x: 1.55, y: 1.55, z: 1.05 } },
     },
   };
@@ -478,11 +627,19 @@ function renderGraph() {
   }
 
   const legend = $("#graphLegend");
+  const modeLabel = state.curveMode === "both"
+    ? "Ambas curvas"
+    : (state.curveMode === "original" ? "Solo f(x)" : "Solo f'(x)");
   if (state.graphMode === "3d") {
-    legend.textContent = "Vista 3D: superficie z = f'(x) extendida en y. La línea naranja son las iteraciones sobre y=0. La superficie transparente es f'(x)=0. La estrella verde es x*.";
+    legend.textContent = `${modeLabel}. Vista 3D: verde = f(x), azul = f'(x). `
+      + "En Ambas las superficies se separan en bandas. La línea naranja son "
+      + "las iteraciones y la estrella verde es x*.";
     plot3D(state.data);
   } else {
-    legend.textContent = "Eje x = valores de x. Eje y = f'(x). Curva azul = f'(x). Línea punteada = f'(x)=0. Puntos naranjas = iteraciones. Estrella verde = x*. Zona sombreada = intervalo inicial [xl, xu].";
+    legend.textContent = `${modeLabel}. Eje x = valores de x. `
+      + "En Ambas, eje izquierdo = f(x) (verde) y eje derecho = f'(x) (azul). "
+      + "Línea punteada = f'(x)=0. Puntos naranjas = iteraciones. "
+      + "Estrella verde = x*. Zona sombreada = intervalo inicial [xl, xu].";
     plot2D(state.data);
   }
 }
@@ -498,6 +655,9 @@ $$(".tab-btn").forEach((button) => {
 $("#calcBtn").addEventListener("click", calculate);
 $("#btn2d").addEventListener("click", () => setGraphMode("2d"));
 $("#btn3d").addEventListener("click", () => setGraphMode("3d"));
+$("#btnBoth").addEventListener("click", () => setCurveMode("both"));
+$("#btnOriginal").addEventListener("click", () => setCurveMode("original"));
+$("#btnDerivative").addEventListener("click", () => setCurveMode("derivative"));
 
 window.addEventListener("resize", () => {
   if (state.data && state.activeTab === "graph" && window.Plotly) {

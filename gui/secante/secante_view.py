@@ -10,7 +10,10 @@ from gui.theme import (
     COLOR_ACCENT, COLOR_ACCENT_HOVER, COLOR_LIGHT_CYAN, COLOR_TEXT, COLOR_MUTED,
     get_title_font, get_section_font, get_label_font
 )
-from lib.secante import SecantRoots, _parse_expression
+from lib.secante import SecantRoots
+from lib.optimization_utils import (
+    build_function_spec, evaluate_curve, evaluate_expression,
+)
 
 class SecantRootsView(ctk.CTkFrame):
     def __init__(self, parent):
@@ -35,7 +38,7 @@ class SecantRootsView(ctk.CTkFrame):
         
         self.title_label = ctk.CTkLabel(
             self.content_frame, 
-            text="📐 Optimización: Secante sobre f'(x)",
+            text="📐 Optimización: Secante desde f(x)",
             font=self.title_font, 
             text_color=COLOR_LIGHT_CYAN
         )
@@ -95,7 +98,7 @@ class SecantRootsView(ctk.CTkFrame):
         card_title.pack(anchor="w", padx=15, pady=(15, 10))
         
         fields = [
-            ("Primera derivada f'(x):", "entry_func", "3*x**2 - 3"),
+            ("Función original f(x):", "entry_func", "x**3 - 3*x"),
             ("Aproximación Inicial x0:", "entry_x0", "0.5"),
             ("Aproximación Inicial x1:", "entry_x1", "1.5"),
             ("Tolerancia (Tol):", "entry_tol", "1e-5"),
@@ -106,7 +109,8 @@ class SecantRootsView(ctk.CTkFrame):
 
         nota = ctk.CTkLabel(
             self.input_card,
-            text=("La Secante resuelve f'(x)=0 sin usar f''.\n"
+            text=("La Secante calcula f'(x) desde f(x) y resuelve f'(x)=0\n"
+                  "sin usar f'' en las iteraciones:\n"
                   "x(k+1) = x(k) - f'(x(k))*(x(k)-x(k-1)) /\n"
                   "                (f'(x(k))-f'(x(k-1)))"),
             font=self.label_font,
@@ -154,7 +158,7 @@ class SecantRootsView(ctk.CTkFrame):
             scrollbar_button_hover_color=COLOR_ACCENT
         )
         self.txt_res.pack(fill="both", expand=True, padx=15, pady=15)
-        self.txt_res.insert("0.0", "Ingrese f'(x) y presione 'Calcular Punto Crítico' para ver el diagnóstico.")
+        self.txt_res.insert("0.0", "Ingrese f(x) y presione 'Calcular Punto Crítico' para ver el diagnóstico.")
         self.txt_res.configure(state="disabled") # Corregido: Bloqueo inicial
         
         self.txt_steps = ctk.CTkTextbox(
@@ -176,6 +180,7 @@ class SecantRootsView(ctk.CTkFrame):
             "4. Calcular el error:\n"
             "   ea = |(x(k+1) - x(k)) / x(k+1)| * 100%\n"
             "5. Repetir hasta que |f'| sea pequeño o ea <= tolerancia.\n\n"
+            "f'(x) se calcula automáticamente desde f(x).\n"
             "La secante aproxima f''(x) con los dos puntos anteriores.\n\n"
             "Para clasificar x*:\n"
             "  f''(x*) > 0 → mínimo\n"
@@ -226,20 +231,31 @@ class SecantRootsView(ctk.CTkFrame):
         )
         self.graph_mode_switch.set("2D")
         self.graph_mode_switch.pack(side="left")
+        ctk.CTkLabel(
+            controls, text="Curva:", font=self.label_font, text_color=COLOR_MUTED
+        ).pack(side="left", padx=(16, 8))
+        self.curve_mode_switch = ctk.CTkSegmentedButton(
+            controls, values=["Ambas", "f(x)", "f'(x)"],
+            command=self._on_curve_mode,
+            font=self.label_font,
+            selected_color=COLOR_ACCENT, selected_hover_color=COLOR_ACCENT_HOVER,
+            unselected_color=COLOR_BG, unselected_hover_color=COLOR_BORDER,
+            text_color=COLOR_TEXT, corner_radius=8
+        )
+        self.curve_mode_switch.set("Ambas")
+        self.curve_mode_switch.pack(side="left")
+        self.curve_mode = "Ambas"
 
         self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.tab_graph)
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=(8, 0))
         self.graph_legend = ctk.CTkLabel(
-            self.tab_graph,
-            text=("Eje x = valores de x.  Eje y = f'(x).\n"
-                  "Curva azul = f'(x).  Línea punteada = y=0 (allí buscamos el corte).\n"
-                  "Puntos naranjas = aproximaciones de cada iteración.\n"
-                  "Estrella verde = x* final."),
+            self.tab_graph, text="",
             font=self.label_font, text_color=COLOR_MUTED,
             justify="left", anchor="w"
         )
         self.graph_legend.pack(fill="x", padx=15, pady=(0, 10))
+        self._update_graph_legend()
         self.apply_graph_theme()
 
         txt_glossary = ctk.CTkTextbox(
@@ -274,21 +290,31 @@ class SecantRootsView(ctk.CTkFrame):
                 spine.set_color(grid_color)
         self.ax.grid(True, linestyle=":", alpha=0.5, color=grid_color)
 
-    def _on_graph_mode(self, value):
-        self.graph_mode = value
-        if value == "3D":
-            self.graph_legend.configure(
-                text=("Eje x = x.  Eje y = profundidad.  Eje z = f'(x).\n"
-                      "Superficie azul = f'(x) extendida.  Superficie gris = f'(x)=0.\n"
-                      "Línea naranja = iterados.  Estrella verde = x* final.")
+    def _update_graph_legend(self):
+        if self.graph_mode == "3D":
+            text = (
+                "Eje x = x.  Eje y = separación de curvas.  Eje z = valor.\n"
+                "Superficie verde = f(x).  Superficie azul = f'(x).\n"
+                "Superficie gris = f'(x)=0.  Línea naranja = iterados.\n"
+                "Estrella verde = x* final sobre cada curva."
             )
         else:
-            self.graph_legend.configure(
-                text=("Eje x = valores de x.  Eje y = f'(x).\n"
-                      "Curva azul = f'(x).  Línea punteada = y=0 (allí buscamos el corte).\n"
-                      "Puntos naranjas = aproximaciones de cada iteración.\n"
-                      "Estrella verde = x* final.")
+            text = (
+                "Curva verde = f(x).  Curva azul = f'(x).  Línea punteada = f'(x)=0.\n"
+                "En 'Ambas' se usa doble eje Y: izquierdo f(x), derecho f'(x).\n"
+                "Puntos naranjas = aproximaciones de cada iteración.\n"
+                "Estrella verde = x* final."
             )
+        self.graph_legend.configure(text=text)
+
+    def _on_graph_mode(self, value):
+        self.graph_mode = value
+        self._update_graph_legend()
+        self._render_graph()
+
+    def _on_curve_mode(self, value):
+        self.curve_mode = value
+        self._update_graph_legend()
         self._render_graph()
 
     def _plot_result(self, result, func_str, xmin, xmax):
@@ -315,43 +341,83 @@ class SecantRootsView(ctk.CTkFrame):
 
     def _render_graph_2d(self, result, func_str, xmin, xmax):
         try:
-            x_sym = sp.Symbol('x')
-            f_expr = _parse_expression(func_str)
-            f_num = sp.lambdify(x_sym, f_expr, 'numpy')
+            self.ax.clear()
+            self.apply_graph_theme()
+            show_original = self.curve_mode in {"Ambas", "f(x)"}
+            show_derivative = self.curve_mode in {"Ambas", "f'(x)"}
+            both = show_original and show_derivative
+            ax2 = self.ax.twinx() if both else None
+            derivative_axis = ax2 if ax2 is not None else self.ax
+            spec = build_function_spec(func_str)
 
-            x_curve = np.linspace(xmin, xmax, 500)
-
-            with np.errstate(divide='ignore', invalid='ignore'):
-                y_curve = f_num(x_curve)
-                if np.isscalar(y_curve):
-                    y_curve = np.full_like(x_curve, y_curve)
-
-            if np.isnan(y_curve).all():
-                raise ValueError("La primera derivada es compleja o\nindefinida en este dominio.")
-
-            self.ax.plot(x_curve, y_curve, label="f'(x)", color="#58A1D3", lw=2)
-            self.ax.axhline(0, color=COLOR_BORDER[1] if ctk.get_appearance_mode() == "Dark" else COLOR_BORDER[0], linestyle="--", linewidth=1)
+            if show_original:
+                xs, ys = evaluate_curve(spec["original"], xmin, xmax, 500)
+                self.ax.plot(xs, ys, color="#2ca02c", lw=2, label="f(x)")
+            if show_derivative:
+                xs, ys = evaluate_curve(spec["derivative"], xmin, xmax, 500)
+                derivative_axis.plot(
+                    xs, ys, color="#58A1D3", lw=2, label="f'(x)")
+                derivative_axis.axhline(
+                    0,
+                    color=(COLOR_BORDER[1] if ctk.get_appearance_mode() == "Dark"
+                           else COLOR_BORDER[0]),
+                    linestyle="--", linewidth=1)
 
             steps_data = result["steps"]
             if len(steps_data) > 1:
                 x_iters = [s["x"] for s in steps_data[:-1]]
-                y_iters = [s["fx"] for s in steps_data[:-1]]
-                self.ax.scatter(x_iters, y_iters, color="#ff7f0e", marker="o", s=35, label="Iterados", zorder=3)
-                self.ax.plot(x_iters, y_iters, color="#ff7f0e", linestyle=":", alpha=0.5)
+                if show_derivative:
+                    y_iters = [s["fx"] for s in steps_data[:-1]]
+                    derivative_axis.scatter(
+                        x_iters, y_iters, color="#ff7f0e", marker="o",
+                        s=35, label="Iterados", zorder=3)
+                    derivative_axis.plot(
+                        x_iters, y_iters, color="#ff7f0e",
+                        linestyle=":", alpha=0.5)
+                elif show_original:
+                    y_iters = [evaluate_expression(spec["original"], value)
+                               for value in x_iters]
+                    self.ax.scatter(
+                        x_iters, y_iters, color="#ff7f0e", marker="o",
+                        s=35, label="Iterados", zorder=3)
 
             final_root = steps_data[-1]["x"]
-            self.ax.scatter(final_root, steps_data[-1]["fx"], color="#2ca02c", marker="*", s=130, label=f"x* ({final_root:.4f})", zorder=4)
+            if show_original:
+                final_original = evaluate_expression(
+                    spec["original"], final_root)
+                self.ax.scatter(
+                    final_root, final_original, color="#2ca02c",
+                    marker="*", s=150, label=f"x* ({final_root:.4f})",
+                    zorder=4)
+            if show_derivative:
+                final_derivative = evaluate_expression(
+                    spec["derivative"], final_root)
+                derivative_axis.scatter(
+                    final_root, final_derivative, color="#2ca02c",
+                    marker="*", s=150, label=f"x* ({final_root:.4f})",
+                    zorder=4)
 
             is_dark = (ctk.get_appearance_mode() == "Dark")
-            legend = self.ax.legend(loc="best")
+            handles, labels = self.ax.get_legend_handles_labels()
+            if ax2 is not None:
+                handles2, labels2 = ax2.get_legend_handles_labels()
+                handles += handles2
+                labels += labels2
+            legend = self.ax.legend(handles, labels, loc="best")
             if legend:
-                legend.get_frame().set_facecolor(COLOR_BG[1] if is_dark else COLOR_BG[0])
-                legend.get_frame().set_edgecolor(COLOR_BORDER[1] if is_dark else COLOR_BORDER[0])
+                legend.get_frame().set_facecolor(
+                    COLOR_BG[1] if is_dark else COLOR_BG[0])
+                legend.get_frame().set_edgecolor(
+                    COLOR_BORDER[1] if is_dark else COLOR_BORDER[0])
                 for text in legend.get_texts():
                     text.set_color(COLOR_TEXT[1] if is_dark else COLOR_TEXT[0])
-            self.ax.set_title("Secante sobre f'(x): evolución de iterados", fontdict={"size": 11, "weight": "bold"})
+            self.ax.set_title(
+                "Secante: f(x) y f'(x)",
+                fontdict={"size": 11, "weight": "bold"})
             self.ax.set_xlabel("x")
-            self.ax.set_ylabel("f'(x)")
+            self.ax.set_ylabel("f(x)" if show_original else "f'(x)")
+            if ax2 is not None:
+                ax2.set_ylabel("f'(x)")
 
         except Exception as ex:
             is_dark = (ctk.get_appearance_mode() == "Dark")
@@ -362,58 +428,92 @@ class SecantRootsView(ctk.CTkFrame):
 
     def _render_graph_3d(self, result, func_str, xmin, xmax):
         try:
-            x_sym = sp.Symbol('x')
-            f_expr = _parse_expression(func_str)
-            f_num = sp.lambdify(x_sym, f_expr, 'numpy')
+            self.ax.clear()
+            self.apply_graph_theme()
+            show_original = self.curve_mode in {"Ambas", "f(x)"}
+            show_derivative = self.curve_mode in {"Ambas", "f'(x)"}
+            both = show_original and show_derivative
+            original_band = [-0.9, -0.3] if both else [-1.0, 1.0]
+            derivative_band = [0.3, 0.9] if both else [-1.0, 1.0]
+            original_y = -0.6 if both else 0.0
+            derivative_y = 0.6 if both else 0.0
+            spec = build_function_spec(func_str)
 
-            x_curve = np.linspace(xmin, xmax, 240)
-            with np.errstate(divide='ignore', invalid='ignore'):
-                y_curve = np.asarray(f_num(x_curve), dtype=float)
-            if y_curve.ndim == 0:
-                y_curve = np.full_like(x_curve, float(y_curve))
-            mask = np.isfinite(y_curve)
-            x_curve = x_curve[mask]
-            y_curve = y_curve[mask]
-
-            if x_curve.size > 1:
-                y_grid = np.array([-1.0, 1.0])
-                x_mesh, y_mesh = np.meshgrid(x_curve, y_grid)
-                z_mesh = np.tile(y_curve, (2, 1))
-                self.ax.plot_surface(
-                    x_mesh, y_mesh, z_mesh, color="#58A1D3",
-                    alpha=0.72, linewidth=0, antialiased=True
-                )
-                self.ax.plot_surface(
-                    x_mesh, y_mesh, np.zeros_like(z_mesh),
-                    color="#93a6c4", alpha=0.14, linewidth=0
-                )
+            if show_original:
+                xs, ys = evaluate_curve(spec["original"], xmin, xmax, 240)
+                mask = np.isfinite(ys)
+                xs, ys = xs[mask], ys[mask]
+                if xs.size > 1:
+                    x_mesh, y_mesh = np.meshgrid(
+                        xs, np.array(original_band))
+                    z_mesh = np.tile(ys, (2, 1))
+                    self.ax.plot_surface(
+                        x_mesh, y_mesh, z_mesh, color="#2ca02c",
+                        alpha=0.72, linewidth=0, antialiased=True)
+            if show_derivative:
+                xs, ys = evaluate_curve(spec["derivative"], xmin, xmax, 240)
+                mask = np.isfinite(ys)
+                xs, ys = xs[mask], ys[mask]
+                if xs.size > 1:
+                    x_mesh, y_mesh = np.meshgrid(
+                        xs, np.array(derivative_band))
+                    z_mesh = np.tile(ys, (2, 1))
+                    self.ax.plot_surface(
+                        x_mesh, y_mesh, z_mesh, color="#58A1D3",
+                        alpha=0.72, linewidth=0, antialiased=True)
+                    self.ax.plot_surface(
+                        x_mesh, y_mesh, np.zeros_like(z_mesh),
+                        color="#93a6c4", alpha=0.14, linewidth=0)
 
             steps_data = result["steps"]
             if steps_data:
                 x_iters = [s["x"] for s in steps_data]
-                y_iters = [s["fx"] for s in steps_data]
-                self.ax.plot(
-                    x_iters, np.zeros(len(x_iters)), y_iters,
-                    color="#ff7f0e", marker="o", markersize=4,
-                    linestyle=":", linewidth=1.4, label="Iterados"
-                )
-                final = steps_data[-1]
-                self.ax.scatter(
-                    [final["x"]], [0], [final["fx"]],
-                    color="#2ca02c", marker="*", s=150,
-                    label=f"x* ≈ {final['x']:.4f}"
-                )
+                if show_derivative:
+                    y_iters = [s["fx"] for s in steps_data]
+                    self.ax.plot(
+                        x_iters, np.full(len(x_iters), derivative_y),
+                        y_iters, color="#ff7f0e", marker="o",
+                        markersize=4, linestyle=":", linewidth=1.4,
+                        label="Iterados f'(x)")
+                elif show_original:
+                    y_iters = [evaluate_expression(
+                        spec["original"], value) for value in x_iters]
+                    self.ax.plot(
+                        x_iters, np.full(len(x_iters), original_y),
+                        y_iters, color="#ff7f0e", marker="o",
+                        markersize=4, linestyle=":", linewidth=1.4,
+                        label="Iterados f(x)")
 
-            self.ax.set_title("Secante sobre f'(x): vista 3D", fontdict={"size": 11, "weight": "bold"})
+                final = steps_data[-1]
+                if show_original:
+                    final_original = evaluate_expression(
+                        spec["original"], final["x"])
+                    self.ax.scatter(
+                        [final["x"]], [original_y], [final_original],
+                        color="#2ca02c", marker="*", s=150,
+                        label=f"x* f(x) ≈ {final['x']:.4f}")
+                if show_derivative:
+                    final_derivative = evaluate_expression(
+                        spec["derivative"], final["x"])
+                    self.ax.scatter(
+                        [final["x"]], [derivative_y], [final_derivative],
+                        color="#2ca02c", marker="*", s=150,
+                        label=f"x* f'(x) ≈ {final['x']:.4f}")
+
+            self.ax.set_title(
+                "Secante: vista 3D",
+                fontdict={"size": 11, "weight": "bold"})
             self.ax.set_xlabel("x")
-            self.ax.set_ylabel("y")
-            self.ax.set_zlabel("f'(x)")
+            self.ax.set_ylabel("f(x) / f'(x)")
+            self.ax.set_zlabel("valor")
             self.ax.view_init(elev=22, azim=-62)
             is_dark = (ctk.get_appearance_mode() == "Dark")
             legend = self.ax.legend(loc="best")
             if legend:
-                legend.get_frame().set_facecolor(COLOR_BG[1] if is_dark else COLOR_BG[0])
-                legend.get_frame().set_edgecolor(COLOR_BORDER[1] if is_dark else COLOR_BORDER[0])
+                legend.get_frame().set_facecolor(
+                    COLOR_BG[1] if is_dark else COLOR_BG[0])
+                legend.get_frame().set_edgecolor(
+                    COLOR_BORDER[1] if is_dark else COLOR_BORDER[0])
                 for text in legend.get_texts():
                     text.set_color(COLOR_TEXT[1] if is_dark else COLOR_TEXT[0])
 
@@ -423,8 +523,7 @@ class SecantRootsView(ctk.CTkFrame):
             self.ax.text2D(
                 0.5, 0.5, f"⚠ Gráfica 3D no disponible:\n{str(ex)}",
                 ha="center", va="center", transform=self.ax.transAxes,
-                color=txt_color, weight="bold"
-            )
+                color=txt_color, weight="bold")
 
     def solve_secant(self):
         func_str = self.entry_func.get()
@@ -503,7 +602,12 @@ class SecantRootsView(ctk.CTkFrame):
             return
             
         resumen = f"📊 Resumen de Ejecución:\n\n{result['message']}\n\n"
+        resumen += f"f(x) = {result.get('original_expr', '---')}\n"
+        resumen += f"f'(x) = {result.get('derivative_expr', '---')}\n"
+        resumen += f"f''(x) = {result.get('second_derivative_expr', '---')}\n"
         resumen += f"Punto crítico x* ≈ {result['solution']:.8f}\n"
+        resumen += f"f(x*) = {result.get('original_value', float('nan')):.6g}\n"
+        resumen += f"f'(x*) = {result.get('derivative_value', float('nan')):.6g}\n"
         if result.get("second_derivative") is not None:
             resumen += f"f''(x*) = {result['second_derivative']:.6g}\n"
         resumen += f"Clasificación: {result.get('critical_type', 'inconcluso')}\n"
@@ -514,6 +618,9 @@ class SecantRootsView(ctk.CTkFrame):
         sep = "─" * 60
         steps_text = (
             "PROCEDIMIENTO — SECANTE SOBRE f'(x)\n"
+            f"f(x) = {result.get('original_expr', '---')}\n"
+            f"f'(x) = {result.get('derivative_expr', '---')}\n"
+            f"f''(x) = {result.get('second_derivative_expr', '---')}\n"
             "Objetivo: resolver f'(x) = 0 sin calcular f''(x).\n\n"
             "Fórmula:\n"
             "  x(k+1) = x(k) - f'(x(k))·(x(k) - x(k-1)) / (f'(x(k)) - f'(x(k-1)))\n\n"
@@ -558,6 +665,7 @@ class SecantRootsView(ctk.CTkFrame):
         steps_text += "═" * 60 + "\n"
         steps_text += "RESULTADO FINAL\n"
         steps_text += f"  x* ≈ {final['x']:.10g}\n"
+        steps_text += f"  f(x*) = {result.get('original_value', float('nan')):.8g}\n"
         steps_text += f"  f'(x*) = {final['fx']:.8g}\n"
         steps_text += f"  f''(x*) = {segunda_final_txt}\n"
         steps_text += f"  Clasificación: {result.get('critical_type', 'inconcluso')}\n"

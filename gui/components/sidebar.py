@@ -9,7 +9,7 @@ from gui.theme import (
 class Sidebar(ctk.CTkFrame):
     """
     Barra lateral reducida a los tres métodos de optimización:
-    Bisección, Newton y Secante sobre f'(x).
+    Bisección, Newton y Secante a partir de f(x).
     """
 
     def __init__(self, master, active_method="bisection_method", **kwargs):
@@ -47,7 +47,7 @@ class Sidebar(ctk.CTkFrame):
 
         section = ctk.CTkLabel(
             self,
-            text="Puntos críticos: f'(x) = 0",
+            text="Puntos críticos: f(x) → f'(x) = 0",
             font=ctk.CTkFont(family="Inter", size=11, weight="bold"),
             text_color=COLOR_MUTED
         )

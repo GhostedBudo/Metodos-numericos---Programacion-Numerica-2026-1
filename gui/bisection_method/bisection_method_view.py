@@ -4,7 +4,9 @@ import numpy as np #pyright: ignore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from lib.bisection_method import BisectionMethod
-from lib.optimization_utils import parse_expression
+from lib.optimization_utils import (
+    build_function_spec, evaluate_curve, evaluate_expression,
+)
 from gui.components.sidebar import Sidebar
 from gui.glossary import GLOSSARY_TEXT
 from gui.theme import (
@@ -18,10 +20,10 @@ class BisectionMethodView(ctk.CTkFrame):
     """
     Vista del Método de Bisección aplicado a optimización.
 
-    El usuario ingresa la primera derivada f'(x), xl, xu, es
-    (tolerancia) e imax. El método resuelve f'(x) = 0 para encontrar
-    un punto crítico x* (mínimo o máximo). Muestra tres tabs:
-    Resultado, Paso a Paso y Gráfica (curva f'(x) + x* marcado).
+    El usuario ingresa la función original f(x), xl, xu, es
+    (tolerancia) e imax. El método calcula f'(x) y resuelve f'(x) = 0
+    para encontrar un punto crítico x* (mínimo o máximo). Muestra tres
+    tabs: Resultado, Paso a Paso y Gráfica (f(x) y f'(x)).
     """
 
     def __init__(self, master, **kwargs):
@@ -49,12 +51,12 @@ class BisectionMethodView(ctk.CTkFrame):
         header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         header_frame.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
-            header_frame, text="Optimización: Bisección sobre f'(x)",
+            header_frame, text="Optimización: Bisección desde f(x)",
             font=self.title_font, text_color=COLOR_LIGHT_CYAN
         ).grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(
             header_frame,
-            text="Encuentra x* donde f'(x) = 0. Requiere que f'(xl) y f'(xu) tengan signos opuestos.",
+            text="Calcula f'(x) y encuentra x* donde f'(x) = 0. Requiere que f'(xl) y f'(xu) tengan signos opuestos.",
             font=self.label_font, text_color=COLOR_MUTED
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
@@ -79,7 +81,7 @@ class BisectionMethodView(ctk.CTkFrame):
         config_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=20)
         config_frame.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(config_frame, text="f'(x):", font=self.label_font, text_color=COLOR_TEXT).grid(
+        ctk.CTkLabel(config_frame, text="f(x):", font=self.label_font, text_color=COLOR_TEXT).grid(
             row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         self.entry_func = ctk.CTkEntry(config_frame, font=self.label_font, fg_color=COLOR_BG,
                                        border_color=COLOR_INTERACTIVE_BORDER, text_color=COLOR_TEXT)
@@ -115,7 +117,7 @@ class BisectionMethodView(ctk.CTkFrame):
             row=5, column=0, sticky="w", padx=(0, 8))
         self.preset_combo = ctk.CTkComboBox(
             config_frame,
-            values=["Manual", "2x−4 en [0,4]", "3x²−3 en [0,1.5]", "cos(x)+0.5 en [0,4]"],
+            values=["Manual", "x²−4x+1 en [0,3]", "x³−3x en [0,1.5]", "sin(x)+0.5x en [0,4]"],
             command=self.on_preset,
             fg_color=COLOR_BG, border_color=COLOR_INTERACTIVE_BORDER,
             button_color=COLOR_INTERACTIVE_BORDER, button_hover_color=COLOR_ACCENT,
@@ -285,37 +287,59 @@ class BisectionMethodView(ctk.CTkFrame):
         )
         self.graph_mode_switch.set("2D")
         self.graph_mode_switch.pack(side="left")
+        ctk.CTkLabel(
+            controls, text="Curva:", font=self.label_font, text_color=COLOR_MUTED
+        ).pack(side="left", padx=(16, 8))
+        self.curve_mode_switch = ctk.CTkSegmentedButton(
+            controls, values=["Ambas", "f(x)", "f'(x)"],
+            command=self._on_curve_mode,
+            font=self.label_font,
+            selected_color=COLOR_ACCENT, selected_hover_color=COLOR_ACCENT_HOVER,
+            unselected_color=COLOR_BG, unselected_hover_color=COLOR_BORDER,
+            text_color=COLOR_TEXT, corner_radius=8
+        )
+        self.curve_mode_switch.set("Ambas")
+        self.curve_mode_switch.pack(side="left")
         self.graph_mode = "2D"
+        self.curve_mode = "Ambas"
         self._plot_data = None
 
         self.graph_frame = ctk.CTkFrame(self.tab_graph, fg_color="transparent")
         self.graph_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.graph_legend = ctk.CTkLabel(
-            self.tab_graph,
-            text=("Eje x = valores de x.  Eje y = f'(x).\n"
-                  "Curva azul = f'(x).  Línea negra = y=0 (allí buscamos el corte).\n"
-                  "Puntos naranjas = xr de cada iteración.  Estrella verde = x* final.\n"
-                  "Zona azul sombreada = intervalo inicial [xl, xu]."),
+            self.tab_graph, text="",
             font=self.label_font, text_color=COLOR_MUTED,
             justify="left", anchor="w"
         )
         self.graph_legend.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 6))
+        self._update_graph_legend()
+
+    def _update_graph_legend(self):
+        if self.graph_mode == "3D":
+            text = (
+                "Eje x = x.  Eje y = separación de curvas.  Eje z = valor.\n"
+                "Superficie verde = f(x).  Superficie azul = f'(x).\n"
+                "Superficie gris = f'(x)=0.  Línea naranja = iterados.\n"
+                "Estrella verde = x* final sobre cada curva."
+            )
+        else:
+            text = (
+                "Curva verde = f(x).  Curva azul = f'(x).  Línea negra = f'(x)=0.\n"
+                "En 'Ambas' se usa doble eje Y: izquierdo f(x), derecho f'(x).\n"
+                "Puntos naranjas = iteraciones.  Estrella verde = x* final.\n"
+                "Zona azul sombreada = intervalo inicial [xl, xu]."
+            )
+        self.graph_legend.configure(text=text)
 
     def _on_graph_mode(self, value):
         self.graph_mode = value
-        if value == "3D":
-            self.graph_legend.configure(
-                text=("Eje x = x.  Eje y = profundidad.  Eje z = f'(x).\n"
-                      "Superficie azul = f'(x) extendida.  Superficie gris = f'(x)=0.\n"
-                      "Línea naranja = iterados.  Estrella verde = x* final.")
-            )
-        else:
-            self.graph_legend.configure(
-                text=("Eje x = valores de x.  Eje y = f'(x).\n"
-                      "Curva azul = f'(x).  Línea negra = y=0 (allí buscamos el corte).\n"
-                      "Puntos naranjas = xr de cada iteración.  Estrella verde = x* final.\n"
-                      "Zona azul sombreada = intervalo inicial [xl, xu].")
-            )
+        self._update_graph_legend()
+        if self._plot_data is not None:
+            self._render_plot()
+
+    def _on_curve_mode(self, value):
+        self.curve_mode = value
+        self._update_graph_legend()
         if self._plot_data is not None:
             self._render_plot()
 
@@ -335,22 +359,22 @@ class BisectionMethodView(ctk.CTkFrame):
 
     # --- Lógica de presets ---
     def on_preset(self, value):
-        if value == "2x−4 en [0,4]":
+        if value == "x²−4x+1 en [0,3]":
             self.load_preset("cuadratica")
-        elif value == "3x²−3 en [0,1.5]":
+        elif value == "x³−3x en [0,1.5]":
             self.load_preset("cubica")
-        elif value == "cos(x)+0.5 en [0,4]":
+        elif value == "sin(x)+0.5x en [0,4]":
             self.load_preset("trigonometrica")
         if value != "Manual":
             self.preset_combo.set("Manual")
 
     def load_preset(self, name):
         if name == "cuadratica":
-            func, xl, xu = "2*x - 4", 0.0, 4.0
+            func, xl, xu = "x**2 - 4*x + 1", 0.0, 3.0
         elif name == "cubica":
-            func, xl, xu = "3*x**2 - 3", 0.0, 1.5
+            func, xl, xu = "x**3 - 3*x", 0.0, 1.5
         elif name == "trigonometrica":
-            func, xl, xu = "cos(x) + 0.5", 0.0, 4.0
+            func, xl, xu = "sin(x) + 0.5*x", 0.0, 4.0
         else:
             return
         self.entry_func.delete(0, "end")
@@ -399,10 +423,14 @@ class BisectionMethodView(ctk.CTkFrame):
             self.lbl_info.configure(text="")
         else:
             sol = result["solution"]
-            out = f"Punto crítico x* ≈ {sol['root']:.8f}\n"
+            out = f"f(x) = {sol.get('original_expr', '---')}\n"
+            out += f"f'(x) = {sol.get('derivative_expr', '---')}\n"
+            out += f"f''(x) = {sol.get('second_derivative_expr', '---')}\n"
+            out += f"\nPunto crítico x* ≈ {sol['root']:.8f}\n"
             out += f"Iteraciones = {sol['iterations']}\n"
             out += f"Error (ea) = {sol['error']:.6g}%\n"
             out += f"Convergió = {'Sí' if sol['converged'] else 'No (máx. iteraciones)'}\n"
+            out += f"f(x*) = {sol.get('original_value', float('nan')):.6g}\n"
             out += f"f'(x*) = {sol['f_value']:.6g}\n"
             if sol.get("second_derivative") is not None:
                 out += f"f''(x*) = {sol['second_derivative']:.6g}\n"
@@ -415,6 +443,8 @@ class BisectionMethodView(ctk.CTkFrame):
             sep = "─" * 60
             steps_text = (
                 "PROCEDIMIENTO — BISECCIÓN SOBRE f'(x)\n"
+                f"f(x) = {sol.get('original_expr', '---')}\n"
+                f"f'(x) = {sol.get('derivative_expr', '---')}\n"
                 "Objetivo: hallar x* donde f'(x*) = 0.\n\n"
                 "Fórmulas:\n"
                 "  xr = (xl + xu) / 2\n"
@@ -428,6 +458,7 @@ class BisectionMethodView(ctk.CTkFrame):
             for step in result["steps"]:
                 if step["type"] == "initial":
                     steps_text += "DATOS INICIALES\n"
+                    steps_text += f"  f(x) = {sol.get('original_expr', '---')}\n"
                     steps_text += f"  f'(x) = {step['f_expr']}\n"
                     steps_text += f"  Intervalo = [{step['xl']:.8g}, {step['xu']:.8g}]\n"
                     steps_text += f"  f'(xl) = {step['f_xl']:.8g}\n"
@@ -457,6 +488,7 @@ class BisectionMethodView(ctk.CTkFrame):
                     steps_text += f"  x* ≈ {step['root']:.10g}\n"
                     steps_text += f"  Iteraciones = {step['iterations']}\n"
                     steps_text += f"  ea final = {step['error']:.8g}%\n"
+                    steps_text += f"  f(x*) = {sol.get('original_value', float('nan')):.8g}\n"
                     steps_text += f"  f'(x*) = {sol['f_value']:.8g}\n"
                     steps_text += f"  f''(x*) = {segunda}\n"
                     steps_text += f"  Clasificación: {sol.get('critical_type', 'inconcluso')}\n"
@@ -512,56 +544,80 @@ class BisectionMethodView(ctk.CTkFrame):
 
     def _render_plot_2d(self, steps, func_str, xl_orig, xu_orig):
         fig, ax = plt.subplots(figsize=(5.5, 3.5))
+        show_original = self.curve_mode in {"Ambas", "f(x)"}
+        show_derivative = self.curve_mode in {"Ambas", "f'(x)"}
+        both = show_original and show_derivative
+        ax2 = ax.twinx() if both else None
+        derivative_axis = ax2 if ax2 is not None else ax
 
         ax.axvspan(xl_orig, xu_orig, alpha=0.1, color="#58A1D3",
                    label="Intervalo inicial")
-        ax.axhline(0, color="k", linewidth=0.8)
+        margen = 0.2 * (xu_orig - xl_orig)
+        a, b = xl_orig - margen, xu_orig + margen
+        spec = None
+        try:
+            spec = build_function_spec(func_str)
+        except Exception:
+            pass
 
-        if func_str:
-            try:
-                import sympy
-                x_sym = sympy.Symbol('x')
-                f_expr = parse_expression(func_str)
-                f_callable = sympy.lambdify(x_sym, f_expr, "numpy")
-                margen = 0.2 * (xu_orig - xl_orig)
-                a, b = xl_orig - margen, xu_orig + margen
-                x_range = np.linspace(a, b, 300)
-                y_range = f_callable(x_range)
-                if np.isscalar(y_range):
-                    y_range = np.full_like(x_range, float(y_range))
-                ax.plot(x_range, y_range, "b-", linewidth=1.5,
-                        label="f'(x)")
-                ax.plot([xl_orig, xu_orig],
-                        [float(f_expr.subs(x_sym, xl_orig)),
-                         float(f_expr.subs(x_sym, xu_orig))],
-                        "or", markersize=7, label="Extremos [xl,xu]")
-            except Exception:
-                pass
+        if spec is not None:
+            if show_original:
+                xs, ys = evaluate_curve(spec["original"], a, b, 300)
+                ax.plot(xs, ys, color="#2ca02c", linewidth=1.8,
+                        label="f(x)")
+            if show_derivative:
+                xs, ys = evaluate_curve(spec["derivative"], a, b, 300)
+                derivative_axis.plot(xs, ys, color="#58A1D3",
+                                     linewidth=1.8, label="f'(x)")
+                derivative_axis.axhline(0, color="k", linewidth=0.8)
 
         x_iters = [s["xr"] for s in steps if s["type"] == "iteration"]
-        y_iters = [s["f_xr"] for s in steps if s["type"] == "iteration"]
-        if len(x_iters) > 0:
-            ax.scatter(x_iters, y_iters, color="#ff7f0e", marker="o", s=35, label="Iterados", zorder=3)
-            ax.plot(x_iters, y_iters, color="#ff7f0e", linestyle=":", alpha=0.5)
+        if x_iters:
+            if show_derivative:
+                y_iters = [s["f_xr"] for s in steps
+                           if s["type"] == "iteration"]
+                derivative_axis.scatter(
+                    x_iters, y_iters, color="#ff7f0e", marker="o",
+                    s=35, label="Iterados", zorder=3)
+                derivative_axis.plot(
+                    x_iters, y_iters, color="#ff7f0e", linestyle=":",
+                    alpha=0.5)
+            elif spec is not None:
+                y_iters = [evaluate_expression(spec["original"], value)
+                           for value in x_iters]
+                ax.scatter(x_iters, y_iters, color="#ff7f0e",
+                           marker="o", s=35, label="Iterados", zorder=3)
 
         try:
-            final_step = next(s for s in reversed(steps) if s["type"] == "final")
+            final_step = next(s for s in reversed(steps)
+                              if s["type"] == "final")
             root_val = final_step["root"]
-            import sympy
-            x_sym = sympy.Symbol('x')
-            f_expr = parse_expression(func_str)
-            f_root = float(f_expr.subs(x_sym, root_val))
         except Exception:
-            f_root = 0.0
             root_val = xl_orig
 
-        ax.scatter(root_val, f_root, color="#2ca02c", marker="*", s=130, label=f"x* ≈ {root_val:.4g}", zorder=4)
+        if spec is not None:
+            if show_original:
+                f_root = evaluate_expression(spec["original"], root_val)
+                ax.scatter(root_val, f_root, color="#2ca02c", marker="*",
+                           s=150, label=f"x* ≈ {root_val:.4g}", zorder=4)
+            if show_derivative:
+                df_root = evaluate_expression(spec["derivative"], root_val)
+                derivative_axis.scatter(
+                    root_val, df_root, color="#2ca02c", marker="*",
+                    s=150, label=f"x* ≈ {root_val:.4g}", zorder=4)
 
-        ax.set_title("Bisección sobre f'(x): punto crítico")
+        ax.set_title("Bisección: f(x) y f'(x)")
         ax.set_xlabel("x")
-        ax.set_ylabel("f'(x)")
+        ax.set_ylabel("f(x)" if show_original else "f'(x)")
+        if ax2 is not None:
+            ax2.set_ylabel("f'(x)")
         ax.grid(True, linestyle=":", alpha=0.6)
-        ax.legend(fontsize=8)
+        handles, labels = ax.get_legend_handles_labels()
+        if ax2 is not None:
+            handles2, labels2 = ax2.get_legend_handles_labels()
+            handles += handles2
+            labels += labels2
+        ax.legend(handles, labels, fontsize=8)
 
         canvas = FigureCanvasTkAgg(fig, master=self.graph_frame)
         canvas.draw()
@@ -570,65 +626,92 @@ class BisectionMethodView(ctk.CTkFrame):
     def _render_plot_3d(self, steps, func_str, xl_orig, xu_orig):
         fig = plt.figure(figsize=(5.5, 3.5))
         ax = fig.add_subplot(111, projection="3d")
+        show_original = self.curve_mode in {"Ambas", "f(x)"}
+        show_derivative = self.curve_mode in {"Ambas", "f'(x)"}
+        both = show_original and show_derivative
+        original_band = [-0.9, -0.3] if both else [-1.0, 1.0]
+        derivative_band = [0.3, 0.9] if both else [-1.0, 1.0]
+        original_y = -0.6 if both else 0.0
+        derivative_y = 0.6 if both else 0.0
 
         margen = 0.2 * (xu_orig - xl_orig)
         a, b = xl_orig - margen, xu_orig + margen
-        if func_str:
-            try:
-                import sympy
-                x_sym = sympy.Symbol('x')
-                f_expr = parse_expression(func_str)
-                f_callable = sympy.lambdify(x_sym, f_expr, "numpy")
-                x_range = np.linspace(a, b, 240)
-                y_range = np.asarray(f_callable(x_range), dtype=float)
-                if y_range.ndim == 0:
-                    y_range = np.full_like(x_range, float(y_range))
+        spec = None
+        try:
+            spec = build_function_spec(func_str)
+        except Exception:
+            pass
+
+        if spec is not None:
+            if show_original:
+                x_range, y_range = evaluate_curve(
+                    spec["original"], a, b, 240)
                 mask = np.isfinite(y_range)
-                x_range = x_range[mask]
-                y_range = y_range[mask]
+                x_range, y_range = x_range[mask], y_range[mask]
                 if x_range.size > 1:
-                    y_grid = np.array([-1.0, 1.0])
-                    x_mesh, y_mesh = np.meshgrid(x_range, y_grid)
+                    x_mesh, y_mesh = np.meshgrid(
+                        x_range, np.array(original_band))
+                    z_mesh = np.tile(y_range, (2, 1))
+                    ax.plot_surface(
+                        x_mesh, y_mesh, z_mesh, color="#2ca02c",
+                        alpha=0.72, linewidth=0, antialiased=True)
+            if show_derivative:
+                x_range, y_range = evaluate_curve(
+                    spec["derivative"], a, b, 240)
+                mask = np.isfinite(y_range)
+                x_range, y_range = x_range[mask], y_range[mask]
+                if x_range.size > 1:
+                    x_mesh, y_mesh = np.meshgrid(
+                        x_range, np.array(derivative_band))
                     z_mesh = np.tile(y_range, (2, 1))
                     ax.plot_surface(
                         x_mesh, y_mesh, z_mesh, color="#58A1D3",
-                        alpha=0.72, linewidth=0, antialiased=True
-                    )
+                        alpha=0.72, linewidth=0, antialiased=True)
                     ax.plot_surface(
                         x_mesh, y_mesh, np.zeros_like(z_mesh),
-                        color="#93a6c4", alpha=0.14, linewidth=0
-                    )
-            except Exception:
-                pass
+                        color="#93a6c4", alpha=0.14, linewidth=0)
 
         x_iters = [s["xr"] for s in steps if s["type"] == "iteration"]
-        y_iters = [s["f_xr"] for s in steps if s["type"] == "iteration"]
         if x_iters:
-            ax.plot(
-                x_iters, np.zeros(len(x_iters)), y_iters,
-                color="#ff7f0e", marker="o", markersize=4,
-                linestyle=":", linewidth=1.4, label="Iterados"
-            )
+            if show_derivative:
+                y_iters = [s["f_xr"] for s in steps
+                           if s["type"] == "iteration"]
+                ax.plot(
+                    x_iters, np.full(len(x_iters), derivative_y), y_iters,
+                    color="#ff7f0e", marker="o", markersize=4,
+                    linestyle=":", linewidth=1.4, label="Iterados f'(x)")
+            elif spec is not None:
+                y_iters = [evaluate_expression(spec["original"], value)
+                           for value in x_iters]
+                ax.plot(
+                    x_iters, np.full(len(x_iters), original_y), y_iters,
+                    color="#ff7f0e", marker="o", markersize=4,
+                    linestyle=":", linewidth=1.4, label="Iterados f(x)")
 
         try:
-            final_step = next(s for s in reversed(steps) if s["type"] == "final")
+            final_step = next(s for s in reversed(steps)
+                              if s["type"] == "final")
             root_val = final_step["root"]
-            import sympy
-            x_sym = sympy.Symbol('x')
-            f_expr = parse_expression(func_str)
-            f_root = float(f_expr.subs(x_sym, root_val))
         except Exception:
-            f_root = 0.0
             root_val = xl_orig
 
-        ax.scatter(
-            [root_val], [0], [f_root], color="#2ca02c", marker="*",
-            s=150, label=f"x* ≈ {root_val:.4g}"
-        )
-        ax.set_title("Bisección sobre f'(x): vista 3D")
+        if spec is not None:
+            if show_original:
+                f_root = evaluate_expression(spec["original"], root_val)
+                ax.scatter(
+                    [root_val], [original_y], [f_root], color="#2ca02c",
+                    marker="*", s=150, label=f"x* f(x) ≈ {root_val:.4g}")
+            if show_derivative:
+                df_root = evaluate_expression(spec["derivative"], root_val)
+                ax.scatter(
+                    [root_val], [derivative_y], [df_root],
+                    color="#2ca02c", marker="*", s=150,
+                    label=f"x* f'(x) ≈ {root_val:.4g}")
+
+        ax.set_title("Bisección: vista 3D")
         ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_zlabel("f'(x)")
+        ax.set_ylabel("f(x) / f'(x)")
+        ax.set_zlabel("valor")
         ax.view_init(elev=22, azim=-62)
         ax.legend(fontsize=8)
 

@@ -1,6 +1,10 @@
 """Glosario compartido por las tres vistas de optimización."""
 
-GLOSSARY_TEXT = """GLOSARIO — OPTIMIZACIÓN CON f'(x) = 0
+GLOSSARY_TEXT = """GLOSARIO — OPTIMIZACIÓN CON f(x) Y f'(x)
+
+FUNCIÓN DE ENTRADA
+  f(x) = función original que escribe el usuario.
+         El sistema calcula automáticamente f'(x) y f''(x).
 
 SÍMBOLOS
   xl   = límite inferior del intervalo. Punto izquierdo.
@@ -12,8 +16,8 @@ SÍMBOLOS
   ea   = error relativo porcentual. Más pequeño es mejor.
 
 DERIVADAS
-  f'(x)   = primera derivada. Al resolver f'(x)=0 se buscan
-            mínimos o máximos de la función original f(x).
+  f'(x)   = primera derivada calculada desde f(x). Al resolver
+            f'(x)=0 se buscan mínimos o máximos de f(x).
   f''(x*) = segunda derivada evaluada en x*.
             f''(x*) > 0  → mínimo local.
             f''(x*) < 0  → máximo local.
@@ -33,13 +37,15 @@ BISECCIÓN
 
 CÓMO LEER LA GRÁFICA
   Eje x = valores de x.
-  Eje y = valores de f'(x).
-  Curva azul = f'(x).
-  Línea negra o punteada = y = 0, donde buscamos el corte.
+  Curva verde = f(x), la función original.
+  Curva azul = f'(x), calculada automáticamente.
+  En el selector Ambas se usa doble eje Y:
+      eje izquierdo = f(x), eje derecho = f'(x).
+  Línea negra o punteada = f'(x) = 0, donde buscamos el corte.
   Puntos naranjas = aproximaciones de cada iteración.
-  Estrella verde = x* final.
+  Estrella verde = x* final sobre la curva seleccionada.
   Zona sombreada = intervalo inicial [xl, xu] (solo Bisección).
-  Vista 3D = superficie de f'(x) extendida; la curva naranja
-             son las iteraciones sobre el centro y la superficie
-             transparente representa f'(x) = 0.
+  Vista 3D = dos superficies separadas: verde para f(x) y azul
+             para f'(x). La superficie transparente representa
+             f'(x) = 0 y la línea naranja son las iteraciones.
 """
