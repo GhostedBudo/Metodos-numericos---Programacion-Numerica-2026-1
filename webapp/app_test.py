@@ -28,6 +28,8 @@ def test_funcion_procesable():
     assert data["analysis"]["processable"] is True
     _assert_verdict(data, "PROCESABLE")
     assert "Dominio real de f(x)" in data["analysis"]["text"]
+    assert "x" in data["analysis"]["latex"]["derivative"]
+    assert data["latex"]["derivative"] == data["analysis"]["latex"]["derivative"]
 
 
 def test_funcion_fuera_de_dominio():
@@ -95,6 +97,8 @@ def test_pestana_analisis_antes_de_resultado():
         html = client.get("/").get_data(as_text=True)
     assert 'id="analysisText"' in html
     assert html.index('data-tab="analysis"') < html.index('data-tab="summary"')
+    assert 'id="b_expr"' in html
+    assert "mathlive.min.js" in html
 
 
 def test_entrada_derivada():

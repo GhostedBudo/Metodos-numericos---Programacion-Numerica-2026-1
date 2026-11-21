@@ -207,6 +207,66 @@ code {
   box-shadow: 0 0 0 3px rgba(88, 161, 211, 0.18);
 }
 
+.field math-field {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 9px 12px;
+  outline: none;
+  font-size: 1rem;
+  --caret-color: var(--accent);
+  --selection-background-color: rgba(88, 161, 211, 0.25);
+  --contains-highlight-background-color: rgba(88, 161, 211, 0.12);
+}
+
+.field math-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(88, 161, 211, 0.18);
+}
+
+.field math-field::part(menu-toggle) {
+  display: none;
+}
+
+.formula-block {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(11, 18, 32, 0.6);
+  overflow-x: auto;
+}
+
+.formula-block:empty {
+  display: none;
+}
+
+.formula-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.formula-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  min-width: 52px;
+}
+
+#stepsFormulas math-div {
+  margin: 6px 0;
+}
+
+math-span,
+math-div {
+  color: var(--text);
+}
+
 .two-cols {
   display: grid;
   grid-template-columns: 1fr;

@@ -89,12 +89,23 @@ def _safe_domain(expr):
     return _format_domain(domain)
 
 
+def _spec_latex(spec):
+    original = spec.get("original")
+    return {
+        "original_label": "F(x)" if spec["original_is_antiderivative"] else "f(x)",
+        "original": sp.latex(original) if original is not None else None,
+        "derivative": sp.latex(spec["derivative"]),
+        "second_derivative": sp.latex(spec["second_derivative"]),
+    }
+
+
 def _describe_function(expr_str, input_type, points, require_second):
     try:
         spec = build_function_spec(expr_str, input_type=input_type)
     except Exception as exc:
         return {
             "processable": False,
+            "latex": None,
             "text": (
                 "ANÁLISIS DE LA FUNCIÓN\n"
                 "Veredicto: NO PROCESABLE\n"
@@ -102,6 +113,7 @@ def _describe_function(expr_str, input_type, points, require_second):
             ),
         }
 
+    latex = _spec_latex(spec)
     function_input = spec["input_type"] == "function"
     entry_expr = spec["original"] if function_input else spec["derivative"]
     entry_label = "f(x)" if function_input else "f'(x)"
@@ -162,6 +174,7 @@ def _describe_function(expr_str, input_type, points, require_second):
         header.append(f"  - {reason}")
     return {
         "processable": processable,
+        "latex": latex,
         "text": "\n".join(header + [""] + lines[2:]),
     }
 
@@ -643,6 +656,7 @@ def solve():
         "success": True,
         "method": method,
         "analysis": analysis,
+        "latex": analysis.get("latex") or _spec_latex(spec),
         "summary": {
             "root": final_x,
             "iterations": iterations,

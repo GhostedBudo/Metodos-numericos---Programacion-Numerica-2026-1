@@ -13,14 +13,27 @@ const methodMeta = {
   bisection: {
     title: "Bisección",
     hint: "Requiere un intervalo [xl, xu] con cambio de signo en f'(x), calculada desde f(x).",
+    formulas: [
+      "x_r = \\frac{x_l + x_u}{2}",
+      "test = f'(x_l) \\cdot f'(x_r)",
+      "ea = \\left|\\frac{x_r - x_{r,ant}}{x_r}\\right| 100\\%",
+    ],
   },
   newton: {
     title: "Newton",
     hint: "Usa x0. Calcula f'(x) y f''(x) desde f(x) para resolver f'(x)=0.",
+    formulas: [
+      "x_{k+1} = x_k - \\frac{f'(x_k)}{f''(x_k)}",
+      "ea = \\left|\\frac{x_{k+1} - x_k}{x_{k+1}}\\right| 100\\%",
+    ],
   },
   secant: {
     title: "Secante",
     hint: "Usa dos puntos iniciales x0 y x1. Calcula f'(x) desde f(x).",
+    formulas: [
+      "x_{k+1} = x_k - f'(x_k)\\frac{x_k - x_{k-1}}{f'(x_k) - f'(x_{k-1})}",
+      "ea = \\left|\\frac{x_{k+1} - x_k}{x_{k+1}}\\right| 100\\%",
+    ],
   },
 };
 
@@ -43,8 +56,49 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
+function setMath(element, latex) {
+  if (!element) return;
+  element.textContent = latex || "";
+  if (typeof element.render === "function") {
+    Promise.resolve(element.render()).catch(() => {});
+  }
+}
+
+function renderFormulaBlock(container, entries) {
+  container.innerHTML = "";
+  for (const [label, latex] of entries) {
+    if (!latex) continue;
+    const row = document.createElement("div");
+    row.className = "formula-row";
+    const name = document.createElement("span");
+    name.className = "formula-label";
+    name.textContent = label;
+    const math = document.createElement("math-span");
+    setMath(math, latex);
+    row.append(name, math);
+    container.append(row);
+  }
+}
+
+function renderMethodFormulas(container, method) {
+  container.innerHTML = "";
+  for (const formula of methodMeta[method].formulas) {
+    const math = document.createElement("math-div");
+    setMath(math, formula);
+    container.append(math);
+  }
+}
+
 function val(id) {
   return document.getElementById(id).value.trim();
+}
+
+function mathValue(id) {
+  const field = document.getElementById(id);
+  const raw = typeof field.getValue === "function"
+    ? field.getValue("ascii-math")
+    : (field.value || field.textContent || "");
+  return normalizeMathExpr(raw);
 }
 
 function setMethod(method) {
@@ -146,6 +200,8 @@ function resetOutputs() {
   $("#summaryContent").innerHTML = `
     <p>Elige un método, llena los datos y presiona <strong>Calcular</strong>.</p>
   `;
+  $("#analysisFormulas").innerHTML = "";
+  $("#stepsFormulas").innerHTML = "";
   $("#analysisText").textContent = "Presiona Calcular para analizar la función.";
   $("#stepsText").textContent = "Aquí aparecerá el procedimiento con fórmulas y sustituciones.";
   const table = $("#iterTable");
@@ -163,7 +219,7 @@ function readPayload() {
   if (state.method === "bisection") {
     return {
       method: "bisection",
-      expr: val("b_expr"),
+      expr: mathValue("b_expr"),
       input_type: state.inputType,
       xl: val("b_xl"),
       xu: val("b_xu"),
@@ -174,7 +230,7 @@ function readPayload() {
   if (state.method === "newton") {
     return {
       method: "newton",
-      expr: val("n_expr"),
+      expr: mathValue("n_expr"),
       input_type: state.inputType,
       x0: val("n_x0"),
       tol: val("n_tol"),
@@ -185,7 +241,7 @@ function readPayload() {
   }
   return {
     method: "secant",
-    expr: val("s_expr"),
+    expr: mathValue("s_expr"),
     input_type: state.inputType,
     x0: val("s_x0"),
     x1: val("s_x1"),
@@ -252,6 +308,12 @@ async function calculate() {
 }
 
 function renderAnalysis(data) {
+  const latex = data.analysis?.latex;
+  renderFormulaBlock($("#analysisFormulas"), [
+    [latex?.original_label || "f(x)", latex?.original],
+    ["f'(x)", latex?.derivative],
+    ["f''(x)", latex?.second_derivative],
+  ]);
   $("#analysisText").textContent =
     data.analysis?.text || "No se pudo analizar la función.";
 }
@@ -292,15 +354,12 @@ function renderSummary(data) {
   const originalLabel = summary.original_is_antiderivative
     ? "F(x) (C=0)"
     : "f(x)";
-  const inputLabel = summary.input_type === "derivative"
-    ? "Entrada: f'(x)"
-    : "Entrada: f(x)";
   const formulas = `
     <div class="summary-formulas">
-      <p>${escapeHtml(inputLabel)}</p>
-      <p>${escapeHtml(originalLabel)} = <code>${escapeHtml(summary.original_expr)}</code></p>
-      <p>f'(x) = <code>${escapeHtml(summary.derivative_expr)}</code></p>
-      <p>f''(x) = <code>${escapeHtml(summary.second_derivative_expr)}</code></p>
+      <p><math-span id="summaryInputLabel"></math-span></p>
+      <p><math-span id="summaryOriginalLabel"></math-span> = <math-span id="summaryOriginal"></math-span></p>
+      <p><math-span>f'(x)</math-span> = <math-span id="summaryDerivative"></math-span></p>
+      <p><math-span>f''(x)</math-span> = <math-span id="summarySecond"></math-span></p>
     </div>
   `;
 
@@ -312,9 +371,16 @@ function renderSummary(data) {
     ${classification}
     <p class="hint">Recuerda: se resuelve f'(x)=0, no f(x)=0.</p>
   `;
+  const latex = data.latex || {};
+  setMath($("#summaryInputLabel"), summary.input_type === "derivative" ? "f'(x)" : "f(x)");
+  setMath($("#summaryOriginalLabel"), latex.original_label || originalLabel);
+  setMath($("#summaryOriginal"), latex.original || summary.original_expr);
+  setMath($("#summaryDerivative"), latex.derivative || summary.derivative_expr);
+  setMath($("#summarySecond"), latex.second_derivative || summary.second_derivative_expr);
 }
 
 function renderSteps(data) {
+  renderMethodFormulas($("#stepsFormulas"), data.method);
   $("#stepsText").textContent = data.steps_text || "Sin procedimiento.";
 }
 
@@ -773,4 +839,16 @@ window.addEventListener("resize", () => {
   }
 });
 
-setMethod("bisection");
+function init() {
+  const mathfieldClass = window.MathfieldElement || window.MathLive?.MathfieldElement;
+  if (mathfieldClass) {
+    mathfieldClass.soundsDirectory = null;
+  }
+  setMethod("bisection");
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init, { once: true });
+} else {
+  init();
+}
