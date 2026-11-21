@@ -27,9 +27,12 @@ def test_funcion_procesable():
     assert data["success"] is True
     assert data["analysis"]["processable"] is True
     _assert_verdict(data, "PROCESABLE")
-    assert "Dominio real de f(x)" in data["analysis"]["text"]
-    assert "x" in data["analysis"]["latex"]["derivative"]
-    assert data["latex"]["derivative"] == data["analysis"]["latex"]["derivative"]
+    assert r"\(f(x) = x^{3} - 3 x\)" in data["analysis"]["text"]
+    assert r"Dominio real de \(f(x)\)" in data["analysis"]["text"]
+    assert r"\(" in data["steps_text"]
+    assert r"\(" in data["summary"]["message"]
+    assert r"\(" in data["summary"]["classification"]
+    assert "x" in data["latex"]["derivative"]
 
 
 def test_funcion_fuera_de_dominio():
@@ -95,9 +98,12 @@ def test_datos_numericos_invalidos():
 def test_pestana_analisis_antes_de_resultado():
     with app.test_client() as client:
         html = client.get("/").get_data(as_text=True)
-    assert 'id="analysisText"' in html
+    assert 'id="analysisText" class="steps analysis-text"' in html
+    assert 'id="stepsText" class="steps steps-text"' in html
     assert html.index('data-tab="analysis"') < html.index('data-tab="summary"')
     assert 'id="b_expr"' in html
+    assert "analysisFormulas" not in html
+    assert "badge" not in html
     assert "mathlive.min.js" in html
 
 
@@ -113,7 +119,7 @@ def test_entrada_derivada():
     })
     assert data["success"] is True
     assert data["analysis"]["processable"] is True
-    assert "F(x) integrada con C = 0" in data["analysis"]["text"]
+    assert r"\(F(x)\) integrada con \(C = 0\)" in data["analysis"]["text"]
 
 
 if __name__ == "__main__":
