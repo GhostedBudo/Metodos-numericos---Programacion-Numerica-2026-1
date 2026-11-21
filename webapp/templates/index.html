@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#0b1220">
   <title>Optimización Numérica — f(x) y f'(x)</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/mathlive/mathlive-fonts.css') }}">
   <script src="{{ url_for('static', filename='plotly.min.js') }}"></script>
 </head>
 <body>
@@ -40,7 +41,7 @@
       <form id="bisectionForm" class="method-form active" data-method="bisection">
         <label class="field">
           <span>Entrada: f(x) o f'(x)</span>
-          <input id="b_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
+          <math-field id="b_expr" smart-fence>x^3-3x</math-field>
         </label>
         <div class="two-cols">
           <label class="field"><span>xl (límite inferior)</span><input id="b_xl" value="0" inputmode="decimal"></label>
@@ -53,7 +54,7 @@
       <form id="newtonForm" class="method-form" data-method="newton">
         <label class="field">
           <span>Entrada: f(x) o f'(x)</span>
-          <input id="n_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
+          <math-field id="n_expr" smart-fence>x^3-3x</math-field>
         </label>
         <div class="two-cols">
           <label class="field"><span>x0 (inicial)</span><input id="n_x0" value="0.5" inputmode="decimal"></label>
@@ -67,7 +68,7 @@
       <form id="secantForm" class="method-form" data-method="secant">
         <label class="field">
           <span>Entrada: f(x) o f'(x)</span>
-          <input id="s_expr" value="x**3 - 3*x" autocomplete="off" spellcheck="false">
+          <math-field id="s_expr" smart-fence>x^3-3x</math-field>
         </label>
         <div class="two-cols">
           <label class="field"><span>x0 (inicial)</span><input id="s_x0" value="0.5" inputmode="decimal"></label>
@@ -81,7 +82,7 @@
 
       <button type="button" class="primary" id="calcBtn">Calcular</button>
       <div id="errorBox" class="error hidden" role="alert"></div>
-      <p class="hint">Elige el tipo: si escribes f(x), se derivan f' y f''; si escribes f'(x), se integra F(x) con C=0 para graficarla. Usa <code>*</code> para multiplicar. Acepta <code>sen</code>, <code>ln</code>, <code>e</code>, <code>^</code>.</p>
+      <p class="hint">Escribe con teclado físico o virtual: <code>2^2</code> se muestra como potencia. Acepta multiplicación implícita (<code>2x</code>), <code>sen</code>, <code>ln</code>, <code>e</code> y <code>pi</code>.</p>
     </section>
 
     <section class="card output-card">
@@ -95,6 +96,7 @@
       </div>
 
       <div class="tab-panel" id="tab-analysis">
+        <div id="analysisFormulas" class="formula-block"></div>
         <pre id="analysisText" class="steps">Presiona Calcular para analizar la función.</pre>
       </div>
 
@@ -105,6 +107,7 @@
       </div>
 
       <div class="tab-panel" id="tab-steps">
+        <div id="stepsFormulas" class="formula-block"></div>
         <pre id="stepsText" class="steps">Aquí aparecerá el procedimiento con fórmulas y sustituciones.</pre>
       </div>
 
@@ -194,6 +197,8 @@
   </main>
 
   <noscript>Esta aplicación necesita JavaScript para calcular y dibujar las gráficas.</noscript>
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='vendor/mathlive/mathlive.min.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='math_expr.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
