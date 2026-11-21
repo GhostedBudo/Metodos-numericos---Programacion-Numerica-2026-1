@@ -96,8 +96,9 @@ def _describe_function(expr_str, input_type, points, require_second):
         return {
             "processable": False,
             "text": (
-                "ANÁLISIS DE LA FUNCIÓN\n\n"
-                f"No se pudo interpretar la entrada: {exc}"
+                "ANÁLISIS DE LA FUNCIÓN\n"
+                "Veredicto: NO PROCESABLE\n"
+                f"  - No se pudo interpretar la entrada: {exc}"
             ),
         }
 
@@ -155,15 +156,30 @@ def _describe_function(expr_str, input_type, points, require_second):
                 reasons.append(f"f''(x) no está definida en x = {_fmt(point)}")
 
     processable = not reasons
-    lines.append("")
-    if processable:
-        lines.append("Verificación inicial: PROCESABLE.")
-    else:
-        lines.append("Verificación inicial: NO PROCESABLE.")
-        for reason in dict.fromkeys(reasons):
-            lines.append(f"  - {reason}")
+    verdict = "PROCESABLE" if processable else "NO PROCESABLE"
+    header = ["ANÁLISIS DE LA FUNCIÓN", f"Veredicto: {verdict}"]
+    for reason in dict.fromkeys(reasons):
+        header.append(f"  - {reason}")
+    return {
+        "processable": processable,
+        "text": "\n".join(header + [""] + lines[2:]),
+    }
 
-    return {"processable": processable, "text": "\n".join(lines)}
+
+def _set_analysis_verdict(analysis, processable, reason=None):
+    analysis["processable"] = processable
+    verdict = "PROCESABLE" if processable else "NO PROCESABLE"
+    lines = analysis["text"].splitlines()
+    verdict_line = f"Veredicto: {verdict}"
+    if len(lines) > 1 and lines[1].startswith("Veredicto:"):
+        lines[1] = verdict_line
+    else:
+        lines.insert(1, verdict_line)
+    if reason:
+        reason_line = f"  - {reason}"
+        if reason_line not in lines:
+            lines.insert(2, reason_line)
+    analysis["text"] = "\n".join(lines)
 
 
 def _make_numeric(expr):
@@ -424,7 +440,11 @@ def _error_response(message, method, analysis=None):
         "error_message": message,
         "analysis": analysis or {
             "processable": False,
-            "text": f"ANÁLISIS DE LA FUNCIÓN\n\n{message}",
+            "text": (
+                "ANÁLISIS DE LA FUNCIÓN\n"
+                "Veredicto: NO PROCESABLE\n"
+                f"  - {message}"
+            ),
         },
     })
 
@@ -480,8 +500,7 @@ def solve():
     except (TypeError, ValueError) as exc:
         reason = f"Datos numéricos inválidos: {exc}"
         analysis = _describe_function(expr_str, input_type, [], False)
-        analysis["processable"] = False
-        analysis["text"] += f"\n\nNO PROCESABLE: {reason}"
+        _set_analysis_verdict(analysis, False, reason)
         return _error_response(reason, method, analysis)
 
     analysis = _describe_function(
@@ -498,18 +517,14 @@ def solve():
         reason = (
             result.get("error_message") or "No se pudo resolver el problema."
         )
-        analysis["processable"] = False
-        analysis["text"] += f"\n\nNO PROCESABLE: {reason}"
+        _set_analysis_verdict(analysis, False, reason)
         return _error_response(reason, method, analysis)
-
-    analysis["text"] += "\n\nPROCESABLE: el método pudo ejecutarse."
 
     try:
         spec = build_function_spec(expr_str, input_type=input_type)
     except Exception as exc:
         reason = f"No se pudieron calcular las derivadas: {exc}"
-        analysis["processable"] = False
-        analysis["text"] += f"\n\nNO PROCESABLE: {reason}"
+        _set_analysis_verdict(analysis, False, reason)
         return _error_response(reason, method, analysis)
 
     original_fn = _make_numeric(spec["original"])
@@ -550,8 +565,7 @@ def solve():
         history = result["steps"]
         if not history:
             reason = "No se generaron iteraciones."
-            analysis["processable"] = False
-            analysis["text"] += f"\n\nNO PROCESABLE: {reason}"
+            _set_analysis_verdict(analysis, False, reason)
             return _error_response(reason, method, analysis)
         final_point = history[-1]
         root = _safe_float(final_point["x"])

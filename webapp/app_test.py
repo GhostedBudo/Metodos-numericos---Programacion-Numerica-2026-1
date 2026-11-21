@@ -7,6 +7,12 @@ def _solve(payload):
         return client.post("/api/solve", json=payload).get_json()
 
 
+def _assert_verdict(data, verdict):
+    lines = data["analysis"]["text"].splitlines()
+    assert lines[0] == "ANÁLISIS DE LA FUNCIÓN"
+    assert lines[1] == f"Veredicto: {verdict}"
+
+
 def test_funcion_procesable():
     data = _solve({
         "method": "newton",
@@ -20,6 +26,7 @@ def test_funcion_procesable():
     })
     assert data["success"] is True
     assert data["analysis"]["processable"] is True
+    _assert_verdict(data, "PROCESABLE")
     assert "Dominio real de f(x)" in data["analysis"]["text"]
 
 
@@ -34,6 +41,7 @@ def test_funcion_fuera_de_dominio():
     })
     assert data["success"] is False
     assert data["analysis"]["processable"] is False
+    _assert_verdict(data, "NO PROCESABLE")
     assert "NO PROCESABLE" in data["analysis"]["text"]
 
 
@@ -49,6 +57,7 @@ def test_sin_cambio_de_signo():
     })
     assert data["success"] is False
     assert data["analysis"]["processable"] is False
+    _assert_verdict(data, "NO PROCESABLE")
     assert "NO PROCESABLE" in data["analysis"]["text"]
 
 
