@@ -64,20 +64,17 @@ function setMath(element, latex) {
   }
 }
 
-function renderFormulaBlock(container, entries) {
-  container.innerHTML = "";
-  for (const [label, latex] of entries) {
-    if (!latex) continue;
-    const row = document.createElement("div");
-    row.className = "formula-row";
-    const name = document.createElement("span");
-    name.className = "formula-label";
-    name.textContent = label;
-    const math = document.createElement("math-span");
-    setMath(math, latex);
-    row.append(name, math);
-    container.append(row);
+function renderLatexText(element, source) {
+  if (!element) return;
+  const text = source || "No se pudo analizar la función.";
+  if (!window.MathLive || typeof MathLive.renderMathInElement !== "function") {
+    element.textContent = text.replaceAll("\\(", "").replaceAll("\\)", "");
+    return;
   }
+  element.innerHTML = escapeHtml(text);
+  MathLive.renderMathInElement(element, {
+    delimiters: [{ left: "\\(", right: "\\)", display: false }],
+  });
 }
 
 function renderMethodFormulas(container, method) {
@@ -185,9 +182,8 @@ function setStepAll() {
 }
 
 function showError(message) {
-  const box = $("#errorBox");
-  box.textContent = message;
-  box.classList.remove("hidden");
+  renderLatexText($("#errorBox"), message);
+  $("#errorBox").classList.remove("hidden");
 }
 
 function hideError() {
@@ -200,7 +196,6 @@ function resetOutputs() {
   $("#summaryContent").innerHTML = `
     <p>Elige un método, llena los datos y presiona <strong>Calcular</strong>.</p>
   `;
-  $("#analysisFormulas").innerHTML = "";
   $("#stepsFormulas").innerHTML = "";
   $("#analysisText").textContent = "Presiona Calcular para analizar la función.";
   $("#stepsText").textContent = "Aquí aparecerá el procedimiento con fórmulas y sustituciones.";
@@ -308,14 +303,7 @@ async function calculate() {
 }
 
 function renderAnalysis(data) {
-  const latex = data.analysis?.latex;
-  renderFormulaBlock($("#analysisFormulas"), [
-    [latex?.original_label || "f(x)", latex?.original],
-    ["f'(x)", latex?.derivative],
-    ["f''(x)", latex?.second_derivative],
-  ]);
-  $("#analysisText").textContent =
-    data.analysis?.text || "No se pudo analizar la función.";
+  renderLatexText($("#analysisText"), data.analysis?.text);
 }
 
 function renderSummary(data) {
@@ -345,10 +333,10 @@ function renderSummary(data) {
   `).join("");
 
   const message = summary.message
-    ? `<p class="summary-message">${escapeHtml(summary.message)}</p>`
+    ? '<p class="summary-message" id="summaryMessage"></p>'
     : "";
   const classification = summary.classification
-    ? `<div class="classification">${escapeHtml(summary.classification)}</div>`
+    ? '<div class="classification" id="summaryClassification"></div>'
     : "";
 
   const originalLabel = summary.original_is_antiderivative
@@ -377,11 +365,13 @@ function renderSummary(data) {
   setMath($("#summaryOriginal"), latex.original || summary.original_expr);
   setMath($("#summaryDerivative"), latex.derivative || summary.derivative_expr);
   setMath($("#summarySecond"), latex.second_derivative || summary.second_derivative_expr);
+  renderLatexText($("#summaryMessage"), summary.message);
+  renderLatexText($("#summaryClassification"), summary.classification);
 }
 
 function renderSteps(data) {
   renderMethodFormulas($("#stepsFormulas"), data.method);
-  $("#stepsText").textContent = data.steps_text || "Sin procedimiento.";
+  renderLatexText($("#stepsText"), data.steps_text || "Sin procedimiento.");
 }
 
 function renderTable(data) {

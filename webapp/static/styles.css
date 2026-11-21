@@ -69,18 +69,6 @@ code {
   font-size: 0.82rem;
 }
 
-.badge {
-  flex: 0 0 auto;
-  border: 1px solid var(--border);
-  background: rgba(88, 161, 211, 0.12);
-  color: #b9dcff;
-  padding: 7px 10px;
-  border-radius: 999px;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 0.78rem;
-  white-space: nowrap;
-}
-
 .method-nav {
   position: sticky;
   top: 0;
@@ -243,19 +231,6 @@ code {
 
 .formula-block:empty {
   display: none;
-}
-
-.formula-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 4px 0;
-}
-
-.formula-label {
-  color: var(--muted);
-  font-size: 0.8rem;
-  min-width: 52px;
 }
 
 #stepsFormulas math-div {
@@ -421,6 +396,18 @@ math-div {
   max-height: 58vh;
   white-space: pre;
   -webkit-overflow-scrolling: touch;
+}
+
+.analysis-text {
+  font-family: inherit;
+  font-size: 0.86rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.steps-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .legend {

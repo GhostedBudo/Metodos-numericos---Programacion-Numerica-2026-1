@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import pathlib
+import re
 import sys
 
 import sympy as sp
@@ -99,13 +100,60 @@ def _spec_latex(spec):
     }
 
 
+def _math(text):
+    return f"\\({text}\\)"
+
+
+def _math_fmt(value, digits=10):
+    text = _fmt(value, digits)
+    return text if text != "---" else r"\text{---}"
+
+
+def _math_domain(expr):
+    text = _safe_domain(expr)
+    if text in {
+        "todos los reales",
+        "ningún número real",
+        "no se pudo determinar simbólicamente",
+        "no disponible",
+    }:
+        return text
+    return _math(text.replace("∞", r"\infty").replace("∪", r"\cup"))
+
+
+def _math_value(label, value, digits=10):
+    return _math(f"{label} = {_math_fmt(value, digits)}")
+
+
+def _math_interval(left, right):
+    return _math(f"[{left}, {right}]")
+
+
+def _math_percent(value, digits=10):
+    return f"{_math_fmt(value, digits)}\\%"
+
+
+def _latex_prose(text):
+    if not text:
+        return ""
+    pattern = re.compile(
+        r"f''\(x\*\)|f'\(x\*\)|f'\(x\)\s*=\s*[-+]?[\d.eE+-]+|f'\(x\)|f'"
+    )
+    return pattern.sub(lambda match: _math(match.group().strip()), text)
+
+
+LABEL_FP = "f'(x)"
+LABEL_FPP = "f''(x)"
+LABEL_FP_STAR = "f'(x^*)"
+LABEL_FPP_STAR = "f''(x^*)"
+
+
 def _describe_function(expr_str, input_type, points, require_second):
     try:
         spec = build_function_spec(expr_str, input_type=input_type)
     except Exception as exc:
         return {
             "processable": False,
-            "latex": None,
             "text": (
                 "ANÁLISIS DE LA FUNCIÓN\n"
                 "Veredicto: NO PROCESABLE\n"
@@ -114,39 +162,47 @@ def _describe_function(expr_str, input_type, points, require_second):
         }
 
     latex = _spec_latex(spec)
+    label_f_raw = "f(x)"
+    label_fp_raw = "f'(x)"
+    label_fpp_raw = "f''(x)"
+    label_f = _math(label_f_raw)
+    label_fp = _math(label_fp_raw)
+    label_fpp = _math(label_fpp_raw)
     function_input = spec["input_type"] == "function"
     entry_expr = spec["original"] if function_input else spec["derivative"]
-    entry_label = "f(x)" if function_input else "f'(x)"
+    entry_label_raw = label_f_raw if function_input else label_fp_raw
+    entry_label = _math(entry_label_raw)
     lines = ["ANÁLISIS DE LA FUNCIÓN", ""]
 
     if function_input:
         lines += [
-            f"f(x) = {spec['original_str']}",
-            f"f'(x) = {spec['derivative_str']}",
-            f"f''(x) = {spec['second_derivative_str']}",
+            _math(f"f(x) = {latex['original']}"),
+            _math(f"f'(x) = {latex['derivative']}"),
+            _math(f"f''(x) = {latex['second_derivative']}"),
         ]
     else:
         lines += [
-            f"f'(x) = {spec['derivative_str']}",
-            f"f''(x) = {spec['second_derivative_str']}",
-            f"F(x) integrada con C = 0 (solo gráfica) = {spec['original_str']}",
+            _math(f"f'(x) = {latex['derivative']}"),
+            _math(f"f''(x) = {latex['second_derivative']}"),
+            f"{_math('F(x)')} integrada con {_math('C = 0')} (solo gráfica) = "
+            f"{_math(latex['original'])}",
         ]
 
     lines += [
         "",
-        f"Dominio real de {entry_label}: {_safe_domain(entry_expr)}",
+        f"Dominio real de {entry_label}: {_math_domain(entry_expr)}",
     ]
     if function_input:
-        lines.append(f"Dominio real de f'(x): {_safe_domain(spec['derivative'])}")
+        lines.append(f"Dominio real de {label_fp}: {_math_domain(spec['derivative'])}")
     lines += [
-        f"Dominio real de f''(x): {_safe_domain(spec['second_derivative'])}",
+        f"Dominio real de {label_fpp}: {_math_domain(spec['second_derivative'])}",
         "Continuidad y diferenciabilidad:",
     ]
     if function_input:
-        lines.append("  f(x) está definida y es continua en su dominio real.")
+        lines.append(f"  {label_f} está definida y es continua en su dominio real.")
     lines += [
-        "  f'(x) está definida y es continua en su dominio real.",
-        "  f''(x) está definida y es continua en su dominio real.",
+        f"  {label_fp} está definida y es continua en su dominio real.",
+        f"  {label_fpp} está definida y es continua en su dominio real.",
     ]
 
     reasons = []
@@ -157,8 +213,10 @@ def _describe_function(expr_str, input_type, points, require_second):
             derivative_value = evaluate_expression(spec["derivative"], point)
             second_value = evaluate_expression(spec["second_derivative"], point)
             lines.append(
-                f"  x = {_fmt(point)}: {entry_label} = {_fmt(entry_value)}, "
-                f"f'(x) = {_fmt(derivative_value)}, f''(x) = {_fmt(second_value)}"
+                f"  {_math('x = ' + _fmt(point))}: "
+                f"{_math(entry_label_raw + ' = ' + _math_fmt(entry_value))}, "
+                f"{_math(label_fp_raw + ' = ' + _math_fmt(derivative_value))}, "
+                f"{_math(label_fpp_raw + ' = ' + _math_fmt(second_value))}"
             )
             if entry_value is None or derivative_value is None:
                 reasons.append(
@@ -174,7 +232,6 @@ def _describe_function(expr_str, input_type, points, require_second):
         header.append(f"  - {reason}")
     return {
         "processable": processable,
-        "latex": latex,
         "text": "\n".join(header + [""] + lines[2:]),
     }
 
@@ -264,89 +321,116 @@ def _secant_table(history):
     return rows
 
 
-def _bisection_steps_text(steps, solution):
-    original_name = (
-        "F(x)" if solution.get("original_is_antiderivative") else "f(x)"
-    )
+def _bisection_steps_text(steps, solution, latex):
+    original_prefix = "F" if solution.get("original_is_antiderivative") else "f"
+    original_point = f"{original_prefix}(x^*)"
+    original_expr = latex["original"]
+    derivative_expr = latex["derivative"]
+    label_fp_xl = "f'(x_l)"
+    label_fp_xu = "f'(x_u)"
+    label_fp_xr = "f'(x_r)"
+    formula_xr = r"x_r = \frac{x_l + x_u}{2}"
+    formula_test = r"test = f'(x_l) \cdot f'(x_r)"
+    formula_ea = r"e_a = \left|\frac{x_r - x_{r,ant}}{x_r}\right| 100\%"
     lines = [
-        "PROCEDIMIENTO — BISECCIÓN SOBRE f'(x)",
-        f"{original_name} = {solution.get('original_expr', '---')}",
-        f"f'(x) = {solution.get('derivative_expr', '---')}",
-        "Objetivo: hallar x* donde f'(x*) = 0.",
+        f"PROCEDIMIENTO — BISECCIÓN SOBRE {_math(LABEL_FP)}",
+        _math(f"{original_prefix}(x) = {original_expr}"),
+        _math(f"f'(x) = {derivative_expr}"),
+        f"Objetivo: hallar {_math('x^*')} donde {_math(LABEL_FP_STAR + ' = 0')}.",
         "",
         "Fórmulas:",
-        "  xr = (xl + xu) / 2",
-        "  test = f'(xl) * f'(xr)",
-        "  ea = |(xr - xr_anterior) / xr| * 100%",
+        f"  {_math(formula_xr)}",
+        f"  {_math(formula_test)}",
+        f"  {_math(formula_ea)}",
         "",
         "Decisión:",
-        "  test < 0  →  xu = xr  (el punto crítico está a la izquierda)",
-        "  test > 0  →  xl = xr  (el punto crítico está a la derecha)",
-        "  test = 0  →  x* exacto",
+        f"  {_math('test < 0')} → {_math('x_u = x_r')} (el punto crítico está a la izquierda)",
+        f"  {_math('test > 0')} → {_math('x_l = x_r')} (el punto crítico está a la derecha)",
+        f"  {_math('test = 0')} → {_math('x^*')} exacto",
         "",
     ]
     for step in steps:
         if step.get("type") == "initial":
             lines.extend([
                 "DATOS INICIALES",
-                f"  {original_name} = {solution.get('original_expr', '---')}",
-                f"  f'(x) = {step['f_expr']}",
-                f"  Intervalo = [{_fmt(step['xl'])}, {_fmt(step['xu'])}]",
-                f"  f'(xl) = {_fmt(step['f_xl'])}",
-                f"  f'(xu) = {_fmt(step['f_xu'])}",
-                f"  f'(xl)*f'(xu) = {_fmt(step['f_xl'] * step['f_xu'])}",
-                f"  es = {step['es']}%   imax = {step['imax']}",
+                f"  {_math(f'{original_prefix}(x) = {original_expr}')}",
+                f"  {_math(LABEL_FP + ' = ' + derivative_expr)}",
+                f"  Intervalo = {_math_interval(_fmt(step['xl']), _fmt(step['xu']))}",
+                f"  {_math_value(label_fp_xl, step['f_xl'])}",
+                f"  {_math_value(label_fp_xu, step['f_xu'])}",
+                f"  {_math_value(label_fp_xl + ' ' + label_fp_xr, step['f_xl'] * step['f_xu'])}",
+                f"  {_math('e_s = ' + str(step['es']) + r'\%')}   "
+                f"{_math('i_{max} = ' + str(step['imax']))}",
                 "",
             ])
         elif step.get("type") == "iteration":
             decision = "x* exacto" if step["action"] == "raiz_exacta" else step["action"]
             xl_new = step.get("xl_new", step["xl"])
             xu_new = step.get("xu_new", step["xu"])
+            xr_formula = (
+                r"x_r = \frac{x_l + x_u}{2} = \frac{"
+                + f"{_fmt(step['xl'])} + {_fmt(step['xu'])}"
+                + r"}{2} = "
+                + _fmt(step['xr'])
+            )
+            test_formula = (
+                "test = " + label_fp_xl + " " + label_fp_xr + " = "
+                + f"\\left({_fmt(step['f_xl'])}\\right)\\left({_fmt(step['f_xr'])}\\right) = "
+                + _fmt(step['test'])
+            )
+            ea_formula = (
+                r"e_a = \left|\frac{" + _fmt(step['xr']) + " - " + _fmt(step['xrold'])
+                + "}{" + _fmt(step['xr']) + r"}\right| 100\% = " + _fmt(step['ea']) + r"\%"
+            )
             lines.extend([
                 "─" * 60,
                 f"ITERACIÓN {step['iter']}",
-                f"  xr = (xl + xu)/2 = ({_fmt(step['xl'])} + {_fmt(step['xu'])})/2 = {_fmt(step['xr'])}",
-                f"  xr_anterior = {_fmt(step['xrold'])}",
-                f"  f'(xl) = {_fmt(step['f_xl'])}",
-                f"  f'(xr) = {_fmt(step['f_xr'])}",
-                f"  test = f'(xl)*f'(xr) = ({_fmt(step['f_xl'])})*({_fmt(step['f_xr'])}) = {_fmt(step['test'])}",
-                f"  Decisión: {decision}",
-                f"  Nuevo intervalo: [{_fmt(xl_new)}, {_fmt(xu_new)}]",
-                f"  ea = |({_fmt(step['xr'])} - {_fmt(step['xrold'])})/{_fmt(step['xr'])}|*100 = {_fmt(step['ea'])}%",
+                f"  {_math(xr_formula)}",
+                f"  {_math_value('x_{r,ant}', step['xrold'])}",
+                f"  {_math_value(label_fp_xl, step['f_xl'])}",
+                f"  {_math_value(label_fp_xr, step['f_xr'])}",
+                f"  {_math(test_formula)}",
+                f"  Decisión: {_math(decision)}",
+                f"  Nuevo intervalo: {_math_interval(_fmt(xl_new), _fmt(xu_new))}",
+                f"  {_math(ea_formula)}",
                 "",
             ])
         elif step.get("type") == "final":
             lines.extend([
                 "═" * 60,
                 "RESULTADO FINAL",
-                f"  x* ≈ {_fmt(step['root'])}",
-                f"  Iteraciones = {step['iterations']}",
-                f"  ea final = {_fmt(step['error'])}%",
-                f"  {original_name}* = {_fmt(solution.get('original_value'))}",
-                f"  f'(x*) = {_fmt(solution['f_value'])}",
-                f"  f''(x*) = {_fmt(solution.get('second_derivative'))}",
-                f"  Clasificación: {solution.get('critical_type', 'inconcluso')}",
-                f"  {solution.get('classification', '')}",
+                f"  {_math('x^* \\approx ' + _fmt(step['root']))}",
+                f"  Iteraciones = {_math(str(step['iterations']))}",
+                f"  {_math('e_a')} final = {_math(_math_percent(step['error']))}",
+                f"  {_math(original_point)} = {_math(_fmt(solution.get('original_value')))}",
+                f"  {_math(LABEL_FP_STAR)} = {_math(_fmt(solution['f_value']))}",
+                f"  {_math(LABEL_FPP_STAR)} = {_math(_fmt(solution.get('second_derivative')))}",
+                f"  Clasificación: {_latex_prose(solution.get('critical_type', 'inconcluso'))}",
+                f"  {_latex_prose(solution.get('classification', ''))}",
             ])
     return "\n".join(lines)
 
 
-def _newton_steps_text(history, second_fn, result):
-    original_name = (
-        "F(x)" if result.get("original_is_antiderivative") else "f(x)"
-    )
+def _newton_steps_text(history, second_fn, result, latex):
+    original_prefix = "F" if result.get("original_is_antiderivative") else "f"
+    original_point = f"{original_prefix}(x^*)"
+    original_expr = latex["original"]
+    derivative_expr = latex["derivative"]
+    second_expr = latex["second_derivative"]
+    formula_newton = r"x_{k+1} = x_k - \frac{f'(x_k)}{f''(x_k)}"
+    formula_ea = r"e_a = \left|\frac{x_{k+1} - x_k}{x_{k+1}}\right| 100\%"
     lines = [
-        "PROCEDIMIENTO — NEWTON SOBRE f'(x)",
-        f"{original_name} = {result.get('original_expr', '---')}",
-        f"f'(x) = {result.get('derivative_expr', '---')}",
-        f"f''(x) = {result.get('second_derivative_expr', '---')}",
-        "Objetivo: resolver f'(x) = 0.",
+        f"PROCEDIMIENTO — NEWTON SOBRE {_math(LABEL_FP)}",
+        _math(f"{original_prefix}(x) = {original_expr}"),
+        _math(f"f'(x) = {derivative_expr}"),
+        _math(f"f''(x) = {second_expr}"),
+        f"Objetivo: resolver {_math(LABEL_FP + ' = 0')}.",
         "",
         "Fórmula:",
-        "  x(k+1) = x(k) - f'(x(k)) / f''(x(k))",
+        f"  {_math(formula_newton)}",
         "",
         "Error relativo:",
-        "  ea = |(x(k+1) - x(k)) / x(k+1)| * 100%",
+        f"  {_math(formula_ea)}",
         "",
     ]
     for index in range(len(history) - 1):
@@ -356,55 +440,78 @@ def _newton_steps_text(history, second_fn, result):
         fpk = actual["fx"]
         xnext = siguiente["x"]
         second = second_fn(xk)
+        label_xk = f"x_{{{index}}}"
+        label_xnext = f"x_{{{index + 1}}}"
+        label_fpk = f"f'({label_xk})"
+        label_fppk = f"f''({label_xk})"
         lines.extend([
             "─" * 60,
             f"ITERACIÓN {index + 1}",
-            f"  x({index}) = {_fmt(xk)}",
-            f"  f'(x({index})) = {_fmt(fpk)}",
+            f"  {_math_value(label_xk, xk)}",
+            f"  {_math_value(label_fpk, fpk)}",
         ])
         if second is not None:
+            iteration_formula = (
+                f"{label_xnext} = {label_xk} - "
+                + f"\\frac{{f'({label_xk})}}{{f''({label_xk})}}"
+            )
+            substitution = (
+                f"= {_fmt(xk)} - \\frac{{{_fmt(fpk)}}}{{{_fmt(second)}}}"
+            )
             lines.extend([
-                f"  f''(x({index})) = {_fmt(second)}",
-                f"  x({index + 1}) = x({index}) - f'(x({index})) / f''(x({index}))",
-                f"           = {_fmt(xk)} - ({_fmt(fpk)}) / ({_fmt(second)})",
-                f"           = {_fmt(xnext)}",
+                f"  {_math_value(label_fppk, second)}",
+                f"  {_math(iteration_formula)}",
+                f"           {_math(substitution)}",
+                f"           {_math('= ' + _fmt(xnext))}",
             ])
         else:
-            lines.append(f"  x({index + 1}) = {_fmt(xnext)}")
+            lines.append(f"  {_math_value(label_xnext, xnext)}")
         if siguiente["error"] is not None:
-            lines.append(f"  ea = {_fmt(siguiente['error'])}%")
+            lines.append(f"  {_math('e_a')} = {_math(_math_percent(siguiente['error']))}")
         lines.append("")
 
     final = history[-1]
     lines.extend([
         "═" * 60,
         "RESULTADO FINAL",
-        f"  x* ≈ {_fmt(final['x'])}",
-        f"  {original_name}* = {_fmt(result.get('original_value'))}",
-        f"  f'(x*) = {_fmt(final['fx'])}",
-        f"  f''(x*) = {_fmt(result.get('second_derivative'))}",
-        f"  Clasificación: {result.get('critical_type', 'inconcluso')}",
-        f"  {result.get('classification', '')}",
+        f"  {_math('x^* \\approx ' + _fmt(final['x']))}",
+        f"  {_math(original_point)} = {_math(_fmt(result.get('original_value')))}",
+        f"  {_math(LABEL_FP_STAR)} = {_math(_fmt(final['fx']))}",
+        f"  {_math(LABEL_FPP_STAR)} = {_math(_fmt(result.get('second_derivative')))}",
+        f"  Clasificación: {_latex_prose(result.get('critical_type', 'inconcluso'))}",
+        f"  {_latex_prose(result.get('classification', ''))}",
     ])
     return "\n".join(lines)
 
 
-def _secant_steps_text(history, result):
-    original_name = (
-        "F(x)" if result.get("original_is_antiderivative") else "f(x)"
+def _secant_steps_text(history, result, latex):
+    original_prefix = "F" if result.get("original_is_antiderivative") else "f"
+    original_point = f"{original_prefix}(x^*)"
+    original_expr = latex["original"]
+    derivative_expr = latex["derivative"]
+    second_expr = latex["second_derivative"]
+    label_prev = "x_{k-1}"
+    label_curr = "x_k"
+    label_next = "x_{k+1}"
+    label_fp_prev = "f'(x_{k-1})"
+    label_fp_curr = "f'(x_k)"
+    formula_secant = (
+        r"x_{k+1} = x_k - f'(x_k)"
+        r"\frac{x_k - x_{k-1}}{f'(x_k) - f'(x_{k-1})}"
     )
+    formula_ea = r"e_a = \left|\frac{x_{k+1} - x_k}{x_{k+1}}\right| 100\%"
     lines = [
-        "PROCEDIMIENTO — SECANTE SOBRE f'(x)",
-        f"{original_name} = {result.get('original_expr', '---')}",
-        f"f'(x) = {result.get('derivative_expr', '---')}",
-        f"f''(x) = {result.get('second_derivative_expr', '---')}",
-        "Objetivo: resolver f'(x) = 0 sin calcular f''(x).",
+        f"PROCEDIMIENTO — SECANTE SOBRE {_math(LABEL_FP)}",
+        _math(f"{original_prefix}(x) = {original_expr}"),
+        _math(f"f'(x) = {derivative_expr}"),
+        _math(f"f''(x) = {second_expr}"),
+        f"Objetivo: resolver {_math(LABEL_FP + ' = 0')} sin calcular {_math(LABEL_FPP)}.",
         "",
         "Fórmula:",
-        "  x(k+1) = x(k) - f'(x(k))·(x(k) - x(k-1)) / (f'(x(k)) - f'(x(k-1)))",
+        f"  {_math(formula_secant)}",
         "",
         "Error relativo:",
-        "  ea = |(x(k+1) - x(k)) / x(k+1)| * 100%",
+        f"  {_math(formula_ea)}",
         "",
     ]
     if len(history) >= 3:
@@ -418,30 +525,42 @@ def _secant_steps_text(history, result):
             f_curr = curr["fx"]
             x_next = nxt["x"]
             denominator = f_curr - f_prev
+            iteration_formula = (
+                f"{label_next} = {label_curr} - {label_fp_curr}"
+                f"\\frac{{{label_curr} - {label_prev}}}{{{label_fp_curr} - {label_fp_prev}}}"
+            )
+            substitution = (
+                f"= {_fmt(x_curr)} - ({_fmt(f_curr)})\\cdot"
+                f"\\frac{{{_fmt(x_curr)} - {_fmt(x_prev)}}}{{{_fmt(f_curr)} - {_fmt(f_prev)}}}"
+            )
+            reduced = (
+                f"= {_fmt(x_curr)} - ({_fmt(f_curr)})\\cdot"
+                f"\\frac{{{_fmt(x_curr - x_prev)}}}{{{_fmt(denominator)}}}"
+            )
             lines.extend([
                 "─" * 60,
                 f"ITERACIÓN {nxt['iter']}",
-                f"  x(k-1) = {_fmt(x_prev)}   f'(x(k-1)) = {_fmt(f_prev)}",
-                f"  x(k)   = {_fmt(x_curr)}   f'(x(k))   = {_fmt(f_curr)}",
-                "  x(k+1) = x(k) - f'(x(k))·(x(k) - x(k-1)) / (f'(x(k)) - f'(x(k-1)))",
-                f"         = {_fmt(x_curr)} - ({_fmt(f_curr)})·({_fmt(x_curr)} - {_fmt(x_prev)}) / ({_fmt(f_curr)} - {_fmt(f_prev)})",
-                f"         = {_fmt(x_curr)} - ({_fmt(f_curr)})·({_fmt(x_curr - x_prev)}) / ({_fmt(denominator)})",
-                f"         = {_fmt(x_next)}",
+                f"  {_math_value(label_prev, x_prev)}   {_math_value(label_fp_prev, f_prev)}",
+                f"  {_math_value(label_curr, x_curr)}   {_math_value(label_fp_curr, f_curr)}",
+                f"  {_math(iteration_formula)}",
+                f"         {_math(substitution)}",
+                f"         {_math(reduced)}",
+                f"         {_math('= ' + _fmt(x_next))}",
             ])
             if nxt["error"] is not None:
-                lines.append(f"  ea = {_fmt(nxt['error'])}%")
+                lines.append(f"  {_math('e_a')} = {_math(_math_percent(nxt['error']))}")
             lines.append("")
 
     final = history[-1]
     lines.extend([
         "═" * 60,
         "RESULTADO FINAL",
-        f"  x* ≈ {_fmt(final['x'])}",
-        f"  {original_name}* = {_fmt(result.get('original_value'))}",
-        f"  f'(x*) = {_fmt(final['fx'])}",
-        f"  f''(x*) = {_fmt(result.get('second_derivative'))}",
-        f"  Clasificación: {result.get('critical_type', 'inconcluso')}",
-        f"  {result.get('classification', '')}",
+        f"  {_math('x^* \\approx ' + _fmt(final['x']))}",
+        f"  {_math(original_point)} = {_math(_fmt(result.get('original_value')))}",
+        f"  {_math(LABEL_FP_STAR)} = {_math(_fmt(final['fx']))}",
+        f"  {_math(LABEL_FPP_STAR)} = {_math(_fmt(result.get('second_derivative')))}",
+        f"  Clasificación: {_latex_prose(result.get('critical_type', 'inconcluso'))}",
+        f"  {_latex_prose(result.get('classification', ''))}",
     ])
     return "\n".join(lines)
 
@@ -540,6 +659,7 @@ def solve():
         _set_analysis_verdict(analysis, False, reason)
         return _error_response(reason, method, analysis)
 
+    latex = _spec_latex(spec)
     original_fn = _make_numeric(spec["original"])
     derivative_fn = _make_numeric(spec["derivative"])
     second_fn = _make_numeric(spec["second_derivative"])
@@ -552,12 +672,12 @@ def solve():
         f_value = _safe_float(solution["f_value"])
         second_value = _safe_float(solution.get("second_derivative"))
         critical_type = solution.get("critical_type", "inconcluso")
-        classification = solution.get("classification", "")
+        classification = _latex_prose(solution.get("classification", ""))
         converged = bool(solution.get("converged"))
         xl_final = _safe_float(solution.get("xl_final"))
         xu_final = _safe_float(solution.get("xu_final"))
         message = ""
-        steps_text = _bisection_steps_text(result["steps"], solution)
+        steps_text = _bisection_steps_text(result["steps"], solution, latex)
         table = _bisection_table(result["steps"])
         iter_points = [
             {
@@ -587,7 +707,7 @@ def solve():
         f_value = _safe_float(final_point["fx"])
         second_value = _safe_float(result.get("second_derivative"))
         critical_type = result.get("critical_type", "inconcluso")
-        classification = result.get("classification", "")
+        classification = _latex_prose(result.get("classification", ""))
         tol_value = float(payload.get("tol", 1e-5))
         converged = (
             (f_value is not None and abs(f_value) <= tol_value)
@@ -595,12 +715,12 @@ def solve():
         )
         xl_final = None
         xu_final = None
-        message = result.get("message", "")
+        message = _latex_prose(result.get("message", ""))
         if method == "newton":
-            steps_text = _newton_steps_text(history, second_fn, result)
+            steps_text = _newton_steps_text(history, second_fn, result, latex)
             table = _newton_table(history, second_fn)
         else:
-            steps_text = _secant_steps_text(history, result)
+            steps_text = _secant_steps_text(history, result, latex)
             table = _secant_table(history)
         iter_points = [
             {
@@ -656,7 +776,7 @@ def solve():
         "success": True,
         "method": method,
         "analysis": analysis,
-        "latex": analysis.get("latex") or _spec_latex(spec),
+        "latex": latex,
         "summary": {
             "root": final_x,
             "iterations": iterations,
