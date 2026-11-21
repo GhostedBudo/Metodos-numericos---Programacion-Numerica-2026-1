@@ -86,11 +86,16 @@
 
     <section class="card output-card">
       <div class="tabs" id="resultTabs" role="tablist">
+        <button type="button" class="tab-btn" data-tab="analysis">Análisis</button>
         <button type="button" class="tab-btn active" data-tab="summary">Resultado</button>
         <button type="button" class="tab-btn" data-tab="steps">Paso a Paso</button>
         <button type="button" class="tab-btn" data-tab="table">Tabla</button>
         <button type="button" class="tab-btn" data-tab="graph">Gráfica</button>
         <button type="button" class="tab-btn" data-tab="glossary">Glosario</button>
+      </div>
+
+      <div class="tab-panel" id="tab-analysis">
+        <pre id="analysisText" class="steps">Presiona Calcular para analizar la función.</pre>
       </div>
 
       <div class="tab-panel active" id="tab-summary">

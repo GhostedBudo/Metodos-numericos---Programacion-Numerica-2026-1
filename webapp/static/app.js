@@ -146,6 +146,7 @@ function resetOutputs() {
   $("#summaryContent").innerHTML = `
     <p>Elige un método, llena los datos y presiona <strong>Calcular</strong>.</p>
   `;
+  $("#analysisText").textContent = "Presiona Calcular para analizar la función.";
   $("#stepsText").textContent = "Aquí aparecerá el procedimiento con fórmulas y sustituciones.";
   const table = $("#iterTable");
   table.querySelector("thead").innerHTML = "";
@@ -198,12 +199,16 @@ function readPayload() {
 async function calculate() {
   if (state.loading) return;
   hideError();
+  state.data = null;
+  state.stepIndex = 0;
+  resetOutputs();
   state.loading = true;
   const button = $("#calcBtn");
   button.disabled = true;
   button.textContent = "Calculando...";
 
   try {
+    $("#analysisText").textContent = "Analizando función...";
     const response = await fetch("/api/solve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -211,9 +216,16 @@ async function calculate() {
     });
     const data = await response.json();
 
+    if (data.analysis) {
+      renderAnalysis(data);
+    }
     if (!response.ok || !data.success) {
-      showError(data.error_message || "No se pudo resolver el problema.");
       state.data = null;
+      if (data.analysis) {
+        setTab("analysis");
+      } else {
+        showError(data.error_message || "No se pudo resolver el problema.");
+      }
       return;
     }
 
@@ -227,15 +239,21 @@ async function calculate() {
     renderSummary(data);
     renderSteps(data);
     renderTable(data);
-    setTab("summary");
+    setTab("analysis");
   } catch (error) {
     showError(`Error de conexión: ${error.message}`);
+    $("#analysisText").textContent = "No se pudo analizar la función.";
     state.data = null;
   } finally {
     state.loading = false;
     button.disabled = false;
     button.textContent = "Calcular";
   }
+}
+
+function renderAnalysis(data) {
+  $("#analysisText").textContent =
+    data.analysis?.text || "No se pudo analizar la función.";
 }
 
 function renderSummary(data) {

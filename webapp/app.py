@@ -7,6 +7,7 @@ import sys
 
 import sympy as sp
 from flask import Flask, jsonify, render_template, request
+from sympy.calculus.util import continuous_domain
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -18,6 +19,7 @@ from lib.optimization_utils import (
     build_function_spec,
     clipped_segment,
     evaluate_curve,
+    evaluate_expression,
     visible_y_range,
 )
 from lib.secante import SecantRoots
@@ -48,6 +50,120 @@ def _fmt(value, digits=10):
     if number is None:
         return "---"
     return f"{number:.{digits}g}"
+
+
+def _format_endpoint(value):
+    if value == -sp.oo:
+        return "-∞"
+    if value == sp.oo:
+        return "∞"
+    return str(value)
+
+
+def _format_domain(domain):
+    if domain == sp.S.Reals:
+        return "todos los reales"
+    if domain == sp.S.EmptySet:
+        return "ningún número real"
+    if isinstance(domain, sp.Union):
+        return " ∪ ".join(_format_domain(arg) for arg in domain.args)
+    if isinstance(domain, sp.Interval):
+        left = "(" if domain.left_open else "["
+        right = ")" if domain.right_open else "]"
+        return (
+            f"{left}{_format_endpoint(domain.start)}, "
+            f"{_format_endpoint(domain.end)}{right}"
+        )
+    if isinstance(domain, sp.FiniteSet):
+        return "{" + ", ".join(_format_endpoint(v) for v in domain.args) + "}"
+    return str(domain).replace("oo", "∞")
+
+
+def _safe_domain(expr):
+    if expr is None:
+        return "no disponible"
+    try:
+        domain = continuous_domain(expr, sp.Symbol("x"), sp.S.Reals)
+    except Exception:
+        return "no se pudo determinar simbólicamente"
+    return _format_domain(domain)
+
+
+def _describe_function(expr_str, input_type, points, require_second):
+    try:
+        spec = build_function_spec(expr_str, input_type=input_type)
+    except Exception as exc:
+        return {
+            "processable": False,
+            "text": (
+                "ANÁLISIS DE LA FUNCIÓN\n\n"
+                f"No se pudo interpretar la entrada: {exc}"
+            ),
+        }
+
+    function_input = spec["input_type"] == "function"
+    entry_expr = spec["original"] if function_input else spec["derivative"]
+    entry_label = "f(x)" if function_input else "f'(x)"
+    lines = ["ANÁLISIS DE LA FUNCIÓN", ""]
+
+    if function_input:
+        lines += [
+            f"f(x) = {spec['original_str']}",
+            f"f'(x) = {spec['derivative_str']}",
+            f"f''(x) = {spec['second_derivative_str']}",
+        ]
+    else:
+        lines += [
+            f"f'(x) = {spec['derivative_str']}",
+            f"f''(x) = {spec['second_derivative_str']}",
+            f"F(x) integrada con C = 0 (solo gráfica) = {spec['original_str']}",
+        ]
+
+    lines += [
+        "",
+        f"Dominio real de {entry_label}: {_safe_domain(entry_expr)}",
+    ]
+    if function_input:
+        lines.append(f"Dominio real de f'(x): {_safe_domain(spec['derivative'])}")
+    lines += [
+        f"Dominio real de f''(x): {_safe_domain(spec['second_derivative'])}",
+        "Continuidad y diferenciabilidad:",
+    ]
+    if function_input:
+        lines.append("  f(x) está definida y es continua en su dominio real.")
+    lines += [
+        "  f'(x) está definida y es continua en su dominio real.",
+        "  f''(x) está definida y es continua en su dominio real.",
+    ]
+
+    reasons = []
+    if points:
+        lines += ["", "Puntos evaluados por el método:"]
+        for point in points:
+            entry_value = evaluate_expression(entry_expr, point)
+            derivative_value = evaluate_expression(spec["derivative"], point)
+            second_value = evaluate_expression(spec["second_derivative"], point)
+            lines.append(
+                f"  x = {_fmt(point)}: {entry_label} = {_fmt(entry_value)}, "
+                f"f'(x) = {_fmt(derivative_value)}, f''(x) = {_fmt(second_value)}"
+            )
+            if entry_value is None or derivative_value is None:
+                reasons.append(
+                    f"la función o f'(x) no están definidas en x = {_fmt(point)}"
+                )
+            if require_second and second_value is None:
+                reasons.append(f"f''(x) no está definida en x = {_fmt(point)}")
+
+    processable = not reasons
+    lines.append("")
+    if processable:
+        lines.append("Verificación inicial: PROCESABLE.")
+    else:
+        lines.append("Verificación inicial: NO PROCESABLE.")
+        for reason in dict.fromkeys(reasons):
+            lines.append(f"  - {reason}")
+
+    return {"processable": processable, "text": "\n".join(lines)}
 
 
 def _make_numeric(expr):
@@ -301,11 +417,15 @@ def _secant_steps_text(history, result):
     return "\n".join(lines)
 
 
-def _error_response(message, method):
+def _error_response(message, method, analysis=None):
     return jsonify({
         "success": False,
         "method": method,
         "error_message": message,
+        "analysis": analysis or {
+            "processable": False,
+            "text": f"ANÁLISIS DE LA FUNCIÓN\n\n{message}",
+        },
     })
 
 
@@ -323,10 +443,14 @@ def solve():
         return _error_response("Método no válido.", method)
 
     expr_str = str(payload.get("expr", "")).strip()
-    if not expr_str:
-        return _error_response("Escribe f(x) o f'(x), según el tipo de entrada.", method)
-
     input_type = str(payload.get("input_type", "function")).strip().lower()
+    if not expr_str:
+        analysis = _describe_function(expr_str, input_type, [], False)
+        return _error_response(
+            "Escribe f(x) o f'(x), según el tipo de entrada.",
+            method,
+            analysis,
+        )
 
     try:
         if method == "bisection":
@@ -334,6 +458,7 @@ def solve():
             xu = float(payload.get("xu"))
             es = float(payload.get("es", 0.01))
             imax = int(payload.get("imax", 100))
+            points = [xl, xu]
             solver = BisectionMethod(
                 expr_str, xl, xu, es=es, imax=imax,
                 input_type=input_type)
@@ -341,6 +466,7 @@ def solve():
             x0 = float(payload.get("x0"))
             tol = float(payload.get("tol", 1e-5))
             max_iter = int(payload.get("max_iter", 150))
+            points = [x0]
             solver = NewtonRoots(
                 expr_str, x0, tol, max_iter, input_type=input_type)
         else:
@@ -348,25 +474,43 @@ def solve():
             x1 = float(payload.get("x1"))
             tol = float(payload.get("tol", 1e-5))
             max_iter = int(payload.get("max_iter", 150))
+            points = [x0, x1]
             solver = SecantRoots(
                 expr_str, x0, x1, tol, max_iter, input_type=input_type)
     except (TypeError, ValueError) as exc:
-        return _error_response(f"Datos numéricos inválidos: {exc}", method)
+        reason = f"Datos numéricos inválidos: {exc}"
+        analysis = _describe_function(expr_str, input_type, [], False)
+        analysis["processable"] = False
+        analysis["text"] += f"\n\nNO PROCESABLE: {reason}"
+        return _error_response(reason, method, analysis)
+
+    analysis = _describe_function(
+        expr_str, input_type, points, method == "newton")
+    if not analysis["processable"]:
+        return _error_response(
+            "La función no puede procesarse con este método.",
+            method,
+            analysis,
+        )
 
     result = solver.solve()
     if not result.get("success"):
-        return _error_response(
-            result.get("error_message") or "No se pudo resolver el problema.",
-            method,
+        reason = (
+            result.get("error_message") or "No se pudo resolver el problema."
         )
+        analysis["processable"] = False
+        analysis["text"] += f"\n\nNO PROCESABLE: {reason}"
+        return _error_response(reason, method, analysis)
+
+    analysis["text"] += "\n\nPROCESABLE: el método pudo ejecutarse."
 
     try:
         spec = build_function_spec(expr_str, input_type=input_type)
     except Exception as exc:
-        return _error_response(
-            f"No se pudieron calcular las derivadas: {exc}",
-            method,
-        )
+        reason = f"No se pudieron calcular las derivadas: {exc}"
+        analysis["processable"] = False
+        analysis["text"] += f"\n\nNO PROCESABLE: {reason}"
+        return _error_response(reason, method, analysis)
 
     original_fn = _make_numeric(spec["original"])
     derivative_fn = _make_numeric(spec["derivative"])
@@ -405,7 +549,10 @@ def solve():
     else:
         history = result["steps"]
         if not history:
-            return _error_response("No se generaron iteraciones.", method)
+            reason = "No se generaron iteraciones."
+            analysis["processable"] = False
+            analysis["text"] += f"\n\nNO PROCESABLE: {reason}"
+            return _error_response(reason, method, analysis)
         final_point = history[-1]
         root = _safe_float(final_point["x"])
         iterations = len(history)
@@ -481,6 +628,7 @@ def solve():
     return jsonify({
         "success": True,
         "method": method,
+        "analysis": analysis,
         "summary": {
             "root": final_x,
             "iterations": iterations,
